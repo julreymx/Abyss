@@ -53,3 +53,16 @@ Para calcular la "visibilidad", he creado el cliente y los esquemas mockeados en
 5. Suscríbete a `subscribeToInfections` y utiliza TextGeometry o trozos de UI de Drei (Html) para lanzar las alertas de Infección crípticas a nivel local en tu escena.
 
 ¡A la espera de la integración completa en el tejido de la matriz psicodélica!
+
+### 4. Optimizaciones de Rendimiento y Sesión Efímera
+- **DisturbedEntity** y **InfectionText**: Ahora utilizan `React.memo` para evitar renders innecesarios.
+- **InstancedMesh (Partículas GPU)**: En lugar de desmontar la malla con cada mensaje, configuramos un `MAX_PARTICLES = 5000` estático y actualizamos la variable instanciada a través de la propiedad de Three.js `mesh.count`, mejorando abismalmente los frames durante la infección.
+- **Sesión Efímera**: Al cargar `OSMentalAbyss`, se llama a `limpiarAbismo()` de Supabase y la sesión de infecciones inicia de cero. Cada infección destruye una partícula del `GPUFluidParticles` dinámicamente.
+
+### 5. Abyss Gallery (Galería 3D)
+- Implementada la vista dinámica de archivos `AbyssGallery` conectados en tiempo real a Supabase (tabla `archivos`).
+- Se creó `FileNode.jsx` que reacciona dependiendo del mime type (imágenes, video reactivo, esferas pulsantes para audio, cubos de wireframe para otros).
+- Se implementó `UploadPortal.jsx`, una UI de overlay brutalista invocada con la tecla "U" para cargar nuevos archivos directamente al bucket de Supabase.
+
+### 6. Abyss HUD Brutalista
+- Construcción e inyección del `AbyssHUD.jsx`. Sobrepone estadísticas sin dañar el canvas de WebGL, mostrando: Partículas restantes, cantidad de navegantes anónimos, y atajos de teclado clave.

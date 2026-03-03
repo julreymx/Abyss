@@ -1,9 +1,19 @@
+const fs = require('fs');
+let content = fs.readFileSync('frontend/src/components/experimental/GPUFluidParticles.jsx', 'utf8');
 
-import React, { useRef, useMemo } from 'react'
+// Change count logic to not recreate the positions array, but just use count in useFrame or setDrawRange
+// The requirement is: "reemplaza esto con una actualización del InstancedMesh via setDrawRange para cambiar cuántas partículas se dibujan sin recrear la geometría"
+
+// We need to initialize count to 5000 and then update the draw range.
+// But the code currently has `count = 10000` as a default and creates arrays based on `count`.
+// We will initialize a MAX_COUNT = 5000 array once.
+
+let newContent = `
+import React, { useRef, useMemo, useEffect } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 
-const vertexShader = `
+const vertexShader = \`
   uniform float uTime;
   attribute vec3 instancePosition;
   attribute float instanceScale;
@@ -69,9 +79,9 @@ const vertexShader = `
     mvPosition.xyz += position * instanceScale;
     gl_Position = projectionMatrix * mvPosition;
   }
-`;
+\`;
 
-const fragmentShader = `
+const fragmentShader = \`
   varying vec2 vUv;
   uniform vec3 uColor;
   void main() {
@@ -80,7 +90,7 @@ const fragmentShader = `
     float alpha = smoothstep(0.5, 0.2, dist);
     gl_FragColor = vec4(uColor, alpha * 0.8);
   }
-`;
+\`;
 
 function mulberry32(a) {
     return function() {
@@ -148,3 +158,6 @@ export default function GPUFluidParticles({ count = 5000, color = '#39FF14' }) {
     </instancedMesh>
   );
 }
+`;
+
+fs.writeFileSync('frontend/src/components/experimental/GPUFluidParticles.jsx', newContent);

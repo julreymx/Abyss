@@ -6,6 +6,11 @@ import { GlitchMode, BlendFunction } from 'postprocessing';
 import * as THREE from 'three';
 import { extend } from '@react-three/fiber';
 import { useMultiplayer } from './multiplayer/useSockets';
+import AbyssHUD from './components/AbyssHUD';
+import GPUFluidParticles from './components/experimental/GPUFluidParticles';
+import AbyssGallery from './gallery/AbyssGallery';
+import UploadPortal from './gallery/UploadPortal';
+import { getRecentInfections, limpiarAbismo } from './services/supabase';
 
 // ----------------------------------------------------------------------
 // 1. SHADERS ENFERMOS (GLSL): Ruido estático y derretimiento radioactivo
@@ -145,7 +150,7 @@ const AudioAnalyzer = ({ setAudioLow }) => {
 // ----------------------------------------------------------------------
 // 3. ARCHIVOS COMO ENTIDADES FÍSICAS MÁS QUE VENTANAS
 // ----------------------------------------------------------------------
-const DisturbedEntity = ({ position, rotation, audioLow, videoUrl }) => {
+const DisturbedEntity = React.memo(({ position, rotation, audioLow, videoUrl }) => {
     const meshRef = useRef();
     const materialRef = useRef();
     const [hovered, setHover] = useState(false);
@@ -189,7 +194,7 @@ const DisturbedEntity = ({ position, rotation, audioLow, videoUrl }) => {
         }
     });
 
-    return (
+    });
         <mesh
             ref={meshRef}
             position={position}
@@ -206,7 +211,9 @@ const DisturbedEntity = ({ position, rotation, audioLow, videoUrl }) => {
             />
         </mesh>
     );
-};
+});
+DisturbedEntity.displayName = "DisturbedEntity";
+
 
 // ----------------------------------------------------------------------
 // 4. CÁMARA LIBRE, NAUSEABUNDA Y MUTADA POR AUDIO
@@ -254,10 +261,10 @@ const AggressivePostProcessing = () => {
             setTimeout(triggerGlitch, Math.random() * 3000 + 2000); // Vuelve a ocurrir en 2-5s
         };
         const timer = setTimeout(triggerGlitch, 2000);
-        return () => clearTimeout(timer);
+        });) => clearTimeout(timer);
     }, []);
 
-    return (
+    });
         <EffectComposer disableNormalPass multisampling={0}>
             <Noise opacity={0.65} blendFunction={BlendFunction.MULTIPLY} />
             <Vignette eskil={false} offset={0.6} darkness={1.1} />
@@ -284,6 +291,22 @@ const AggressivePostProcessing = () => {
 export default function OSMentalAbyss() {
     const [audioLow, setAudioLow] = useState(0);
     const { socket, otherPlayers } = useMultiplayer();
+    const [infecciones, setInfecciones] = useState([]);
+    const [particleCount, setParticleCount] = useState(5000);
+
+    useEffect(() => {
+        const init = async () => {
+            await limpiarAbismo();
+            const recents = await getRecentInfections(5000);
+            setInfecciones(recents || []);
+        };
+        init();
+    }, []);
+
+    useEffect(() => {
+        setParticleCount(Math.max(0, 5000 - infecciones.length));
+    }, [infecciones]);
+
 
     // Esparcir archivos caóticamente en un rango espacial amplio
     const entities = useMemo(() => {
@@ -303,9 +326,11 @@ export default function OSMentalAbyss() {
         }));
     }, []);
 
-    return (
+    });
         <div style={{ width: '100vw', height: '100vh', background: '#000', overflow: 'hidden', margin: 0, padding: 0 }}>
             <AudioAnalyzer setAudioLow={setAudioLow} />
+            <AbyssHUD particleCount={particleCount} playerCount={Object.keys(otherPlayers).length + 1} />
+            <UploadPortal />
 
             <Canvas
                 camera={{ position: [0, 0, 5], fov: 75 }}
@@ -314,6 +339,7 @@ export default function OSMentalAbyss() {
                 <color attach="background" args={['#000000']} />
 
                 <NauseatingCamera audioLow={audioLow} socket={socket} />
+                <GPUFluidParticles count={particleCount} color="#39FF14" />
 
                 {/* --- RENDER DE OTROS JUGADORES (FANTASMAS) --- */}
                 {Object.entries(otherPlayers).map(([id, pos]) => (
@@ -329,6 +355,7 @@ export default function OSMentalAbyss() {
                     ))}
                 </React.Suspense>
 
+                <AbyssGallery />
                 <AggressivePostProcessing />
             </Canvas>
         </div>
