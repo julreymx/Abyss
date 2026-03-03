@@ -1,22 +1,17 @@
 import React, { useRef, useState, useMemo, useEffect } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { shaderMaterial, useVideoTexture, Html } from '@react-three/drei';
+import { shaderMaterial, useVideoTexture } from '@react-three/drei';
 import { EffectComposer, Noise, Vignette, ChromaticAberration, Glitch } from '@react-three/postprocessing';
 import { GlitchMode, BlendFunction } from 'postprocessing';
 import * as THREE from 'three';
 import { extend } from '@react-three/fiber';
 import { useMultiplayer } from './multiplayer/useSockets';
-// Jules components
 import AbyssHUD from './components/AbyssHUD';
 import GPUFluidParticles from './components/experimental/GPUFluidParticles';
 import AbyssGallery from './gallery/AbyssGallery';
 import UploadPortal from './gallery/UploadPortal';
-// Our components
-import ProceduralCrystal from './components/experimental/ProceduralCrystal';
 import InfectionTerminal from './components/InfectionTerminal';
-import AbyssNavigator from './controls/AbyssNavigator';
-// Services
-import { subscribeToInfections, getRecentInfections, limpiarAbismo } from './services/supabase';
+import { getRecentInfections, limpiarAbismo, subscribeToInfections } from './services/supabase';
 
 // ----------------------------------------------------------------------
 // 1. SHADERS ENFERMOS (GLSL): Ruido estático y derretimiento radioactivo
@@ -24,12 +19,13 @@ import { subscribeToInfections, getRecentInfections, limpiarAbismo } from './ser
 const MeltingShaderMaterial = shaderMaterial(
     {
         time: 0,
-        uHover: 0,
-        uColorEffect: new THREE.Color('#39FF14'),
-        uAudioLow: 0,
+        uHover: 0, // Transición de 0 a 1
+        uColorEffect: new THREE.Color('#39FF14'), // Verde tóxico o Magenta
+        uAudioLow: 0, // Reactividad al bajo
         tDiffuse: null,
         uHasTexture: 0.0,
     },
+    // Vertex Shader: Deformación física del plano
     `
     uniform float time;
     uniform float uHover;
@@ -37,7 +33,11 @@ const MeltingShaderMaterial = shaderMaterial(
     varying vec2 vUv;
     varying vec3 vPosition;
 
+    // Ruido Perlin simple 3D (Implementación compacta de snoise)
     vec4 permute(vec4 x){return mod(((x*34.0)+1.0)*x, 289.0);}
+    vec4 taylorInvSqrt(vec4 r){return 1.79284291400159 - 0.85373472095314 * r;}
+
+    // Pseudo-ruido para ahorrar espacio en este ejemplo
     float noise(vec3 p) {
       vec3 a = floor(p);
       vec3 d = p - a;
@@ -58,14 +58,19 @@ const MeltingShaderMaterial = shaderMaterial(
     void main() {
       vUv = uv;
       vec3 pos = position;
+
+      // La malla se derrite por el hover y muta con los bajos del audio
       float noiseFreq = 2.0;
-      float noiseAmp = (0.5 * uHover) + (uAudioLow * 0.3);
+      float noiseAmp = (0.5 * uHover) + (uAudioLow * 0.3); // Amplitud extrema
       vec3 noisePos = vec3(pos.x * noiseFreq + time, pos.y * noiseFreq + time, pos.z);
-      pos.z += noise(noisePos) * noiseAmp;
+
+      pos.z += noise(noisePos) * noiseAmp; // Alteración destructiva en Z
+
       vPosition = pos;
       gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
     }
   `,
+    // Fragment Shader: Interferencia y sobreescritura de color
     `
     uniform float time;
     uniform float uHover;
@@ -80,29 +85,37 @@ const MeltingShaderMaterial = shaderMaterial(
     }
 
     void main() {
+      // Estado de reposo: ruido estático constante
       float staticNoise = random(vUv * time) * 0.2;
-      vec3 color = vec3(0.05) + vec3(staticNoise);
+      vec3 color = vec3(0.05) + vec3(staticNoise); // Oscuro pero ruidoso
 
       if (uHasTexture > 0.5) {
          vec4 tex = texture2D(tDiffuse, vUv);
          color = mix(color, tex.rgb, clamp(0.9 - (uHover * 0.5), 0.0, 1.0)) + vec3(staticNoise * 0.1);
       }
 
+      // Hover: inyección radioactiva/magenta y scanlines
       vec3 meltColor = mix(color, uColorEffect, uHover * 0.85);
+
+      // Scanlines que asfixian la imagen cuando se corrompe
       float scanline = sin(vUv.y * 150.0 + time * 15.0) * 0.1 * uHover;
       meltColor -= vec3(scanline);
+
       gl_FragColor = vec4(meltColor, 1.0);
     }
   `
 );
 
+// Registrar shader para R3F
 extend({ MeltingShaderMaterial });
 
 // ----------------------------------------------------------------------
-// 2. AUDIO ANALYZER
+// 2. AUDIO ANALYZER ESQUELETO (Web Audio API atado a R3F)
 // ----------------------------------------------------------------------
 const AudioAnalyzer = ({ setAudioLow }) => {
     useEffect(() => {
+        // Nota: Los navegadores exigen una interacción previa del usuario.
+        // Como presionar "Seguir" es el punto de entrada, el contexto de audio se puede activar.
         const startAudio = async () => {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -111,33 +124,42 @@ const AudioAnalyzer = ({ setAudioLow }) => {
                 const source = audioCtx.createMediaStreamSource(stream);
                 source.connect(analyser);
                 analyser.fftSize = 256;
+
                 const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
                 const updateAudio = () => {
                     analyser.getByteFrequencyData(dataArray);
+                    // Promediar frecuencias bajas (el bajo/golpe)
                     let sumLow = 0;
-                    for (let i = 0; i < 5; i++) sumLow += dataArray[i];
-                    const newAudioLow = (sumLow / 5) / 255.0;
+                    const newAudioLow = (sumLow / 5) / 255.0; // Normalizado 0 a 1
+                    // Interpolación (LERP) para suavizar la sacudida del micrófono
                     setAudioLow(prev => prev + (newAudioLow - prev) * 0.15);
+
                     requestAnimationFrame(updateAudio);
                 };
                 updateAudio();
             } catch (err) {
-                console.warn('Permiso de micrófono denegado.', err);
+                console.warn("Permiso de micrófono denegado, silenciando reactividad auditiva.", err);
             }
         };
         startAudio();
     }, [setAudioLow]);
+
     return null;
 };
 
 // ----------------------------------------------------------------------
-// 3. ENTIDAD FÍSICA
+// 3. ARCHIVOS COMO ENTIDADES FÍSICAS MÁS QUE VENTANAS
 // ----------------------------------------------------------------------
 const DisturbedEntity = React.memo(({ position, rotation, audioLow, videoUrl }) => {
     const meshRef = useRef();
     const materialRef = useRef();
     const [hovered, setHover] = useState(false);
-    const videoTexture = videoUrl ? useVideoTexture(videoUrl, { muted: true, loop: true, start: true, crossOrigin: 'Anonymous' }) : null;
+
+    // Carga robusta de la textura del video, solo si existe videoUrl
+    const videoTexture = videoUrl ? useVideoTexture(videoUrl, { muted: true, loop: true, start: true, crossOrigin: "Anonymous" }) : null;
+
+    // Decisión cromática adaptada a Jules OS
     const toxicColor = useMemo(() => {
         const colors = ['#39FF14', '#0a2912', '#ccff00', '#00ff66'];
         return colors[Math.floor(Math.random() * colors.length)];
@@ -150,23 +172,30 @@ const DisturbedEntity = React.memo(({ position, rotation, audioLow, videoUrl }) 
             materialRef.current.uAudioLow = audioLow;
             materialRef.current.tDiffuse = videoTexture;
             materialRef.current.uHasTexture = videoTexture ? 1.0 : 0.0;
+
+            // Interpolación ansiosa del hover
             targetHover.current = THREE.MathUtils.lerp(targetHover.current, hovered ? 1 : 0, 0.08);
             materialRef.current.uHover = targetHover.current;
         }
+
         if (meshRef.current) {
+            // Rotación suave lenta (Zero Gravity)
             meshRef.current.rotation.x += delta * 0.05;
             meshRef.current.rotation.y += delta * 0.08;
+
             if (hovered) {
+                // REPELENCIA SUAVE: El mesh se aleja y rota, no convulsiona
                 meshRef.current.position.z -= delta * 2.0;
                 meshRef.current.rotation.z += delta * 0.5;
             } else {
+                // Flotación espacial fluida en múltiples ejes
                 meshRef.current.position.y += Math.sin(state.clock.elapsedTime * 0.5 + position[0]) * 0.01;
                 meshRef.current.position.x += Math.cos(state.clock.elapsedTime * 0.3 + position[1]) * 0.01;
             }
         }
     });
 
-    return (
+    });
         <mesh
             ref={meshRef}
             position={position}
@@ -174,6 +203,7 @@ const DisturbedEntity = React.memo(({ position, rotation, audioLow, videoUrl }) 
             onPointerOver={() => setHover(true)}
             onPointerOut={() => setHover(false)}
         >
+            {/* Geometría de alta densidad (64x64) para que el Vertex Shader deforme bien */}
             <planeGeometry args={[4, 5, 64, 64]} />
             <meltingShaderMaterial
                 ref={materialRef}
@@ -183,44 +213,40 @@ const DisturbedEntity = React.memo(({ position, rotation, audioLow, videoUrl }) 
         </mesh>
     );
 });
-DisturbedEntity.displayName = 'DisturbedEntity';
+DisturbedEntity.displayName = "DisturbedEntity";
+
 
 // ----------------------------------------------------------------------
-// 4. INFECTION TEXT (floating 3D HTML labels)
+// 4. CÁMARA LIBRE, NAUSEABUNDA Y MUTADA POR AUDIO
 // ----------------------------------------------------------------------
-const InfectionText = React.memo(({ mensaje, color, position }) => {
-    const ref = useRef();
-    const offset = useRef(Math.random() * Math.PI * 2);
+const NauseatingCamera = ({ audioLow, socket }) => {
+    const { camera } = useThree();
+    const lastEmit = useRef(0);
+
     useFrame((state) => {
-        if (ref.current) {
-            ref.current.position.y += Math.sin(state.clock.elapsedTime * 0.4 + offset.current) * 0.003;
-            ref.current.rotation.y += 0.004;
+        const t = state.clock.elapsedTime;
+
+        // Paneos muy suaves y flotantes tipo espacio exterior
+        camera.rotation.z = Math.sin(t * 0.1) * 0.05 + (audioLow * 0.01);
+        camera.position.x = Math.sin(t * 0.05) * 1.5;
+        camera.position.y = Math.cos(t * 0.07) * 1.5;
+
+        // Emitir posición al servidor cada ~100ms
+        if (socket && socket.connected && t - lastEmit.current > 0.1) {
+            lastEmit.current = t;
+            socket.emit('user_moved', {
+                x: camera.position.x,
+                y: camera.position.y,
+                z: camera.position.z
+            });
         }
+
+        // FOV muta suavemente con el bajo para inmersión sin mareo brusco
+        camera.fov = 75 + (audioLow * 10.0);
+        camera.updateProjectionMatrix();
     });
-    return (
-        <mesh ref={ref} position={position}>
-            <Html
-                center
-                distanceFactor={8}
-                style={{
-                    color: color || '#39FF14',
-                    fontFamily: "'Courier New', monospace",
-                    fontSize: '13px',
-                    fontWeight: 'bold',
-                    letterSpacing: '2px',
-                    textShadow: `0 0 8px ${color || '#39FF14'}, 0 0 20px ${color || '#39FF14'}`,
-                    whiteSpace: 'nowrap',
-                    userSelect: 'none',
-                    pointerEvents: 'none',
-                    opacity: 0.9,
-                }}
-            >
-                {mensaje}
-            </Html>
-        </mesh>
-    );
-});
-InfectionText.displayName = 'InfectionText';
+    return null;
+};
 
 // ----------------------------------------------------------------------
 // 5. POST-PROCESAMIENTO AGRESIVO
@@ -229,23 +255,26 @@ const AggressivePostProcessing = () => {
     const [glitchActive, setGlitchActive] = useState(false);
 
     useEffect(() => {
+        // El Glitch se dispara de manera aleatoria cada 2 a 5 segundos
         const triggerGlitch = () => {
             setGlitchActive(true);
-            setTimeout(() => setGlitchActive(false), Math.random() * 400 + 100);
-            setTimeout(triggerGlitch, Math.random() * 3000 + 2000);
+            setTimeout(() => setGlitchActive(false), Math.random() * 400 + 100); // Glitch dura entre 100ms y 500ms
+            setTimeout(triggerGlitch, Math.random() * 3000 + 2000); // Vuelve a ocurrir en 2-5s
         };
         const timer = setTimeout(triggerGlitch, 2000);
-        return () => clearTimeout(timer);
+        });) => clearTimeout(timer);
     }, []);
 
-    return (
+    });
         <EffectComposer disableNormalPass multisampling={0}>
             <Noise opacity={0.65} blendFunction={BlendFunction.MULTIPLY} />
             <Vignette eskil={false} offset={0.6} darkness={1.1} />
+            {/* Aberración al máximo para destrozar los bordes */}
             <ChromaticAberration offset={[0.015, 0.015]} blendFunction={BlendFunction.NORMAL} />
+
             {glitchActive && (
                 <Glitch
-                    delay={[0, 0]}
+                    delay={[0, 0]} // Se fuerza manualmente
                     duration={[0.1, 0.3]}
                     strength={[0.6, 1.5]}
                     mode={GlitchMode.SPORADIC}
@@ -258,148 +287,120 @@ const AggressivePostProcessing = () => {
 };
 
 // ----------------------------------------------------------------------
-// 6. OS_MENTAL_ABYSS — ENTRY POINT
+// 6. OS_MENTAL_ABYSS - ENTRY POINT DE LA GALERÍA
 // ----------------------------------------------------------------------
 export default function OSMentalAbyss() {
     const [audioLow, setAudioLow] = useState(0);
-    const [infecciones, setInfecciones] = useState([]);
-    const [terminalOpen, setTerminalOpen] = useState(false);
     const { socket, otherPlayers } = useMultiplayer();
+    const [infecciones, setInfecciones] = useState([]);
+    const [particleCount, setParticleCount] = useState(5000);
+    const [terminalOpen, setTerminalOpen] = useState(false);
+    const [uploadOpen, setUploadOpen] = useState(false);
 
-    // Sesión efímera: limpia el abismo al entrar, suscribe a nuevas infecciones
     useEffect(() => {
-        limpiarAbismo().then(() => setInfecciones([]));
-        const channel = subscribeToInfections((newInfection) => {
-            setInfecciones(prev => [newInfection, ...prev].slice(0, 5000));
-        });
-        return () => channel.unsubscribe();
+        const init = async () => {
+            await limpiarAbismo();
+            const recents = await getRecentInfections(5000);
+            setInfecciones(recents || []);
+
+            subscribeToInfections((newInfection) => {
+                setInfecciones(prev => [newInfection, ...prev]);
+            });
+        };
+        init();
     }, []);
 
-    // Shortcut [I] para la terminal de infecciones
+    useEffect(() => {
+        setParticleCount(Math.max(0, 5000 - infecciones.length));
+    }, [infecciones]);
+
     useEffect(() => {
         const onKey = (e) => {
             if (e.code === 'KeyI' && !e.target.matches('input, textarea')) {
+                e.preventDefault();
                 setTerminalOpen(v => !v);
+            }
+            if (e.code === 'KeyU' && !e.target.matches('input, textarea')) {
+                e.preventDefault();
+                setUploadOpen(v => !v);
+            }
+            if (e.key === 'Escape') {
+                setTerminalOpen(false);
+                setUploadOpen(false);
             }
         };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
     }, []);
 
-    // Cada infección consume 1 partícula
-    const particleCount = Math.max(0, 5000 - infecciones.length);
 
-    // Entidades físicas esparcidas en el espacio
+    // Esparcir archivos caóticamente en un rango espacial amplio
     const entities = useMemo(() => {
         return Array.from({ length: 25 }).map((_, i) => ({
             position: [
                 (Math.random() - 0.5) * 35,
                 (Math.random() - 0.5) * 35,
-                (Math.random() - 0.5) * 20 - 15,
+                (Math.random() - 0.5) * 20 - 15 // Empujados hacia la profundidad Z
             ],
             rotation: [
                 Math.random() * Math.PI,
                 Math.random() * Math.PI,
-                Math.random() * Math.PI,
+                Math.random() * Math.PI // Sin concepto de "arriba" o "abajo"
             ],
-            videoUrl: null,
+            videoUrl: i % 5 === 0 ? '/CriticoMarssub.mp4' : null, // Muestra el video en unas de cada 5 entidades
+            // videoUrl: '/CriticoMarssub.mp4'
         }));
     }, []);
 
-    return (
-        <>
-            <div style={{ width: '100vw', height: '100vh', background: '#000', overflow: 'hidden', margin: 0, padding: 0 }}>
-                <AudioAnalyzer setAudioLow={setAudioLow} />
+    });
+        <div style={{ width: '100vw', height: '100vh', background: '#000', overflow: 'hidden', margin: 0, padding: 0 }}>
+            <AudioAnalyzer setAudioLow={setAudioLow} />
+            <AbyssHUD particleCount={particleCount} playerCount={Object.keys(otherPlayers).length + 1} />
+            <InfectionTerminal isOpen={terminalOpen} onClose={() => setTerminalOpen(false)} />
+            <UploadPortal isOpen={uploadOpen} onClose={() => setUploadOpen(false)} />
 
-                {/* HUD brutalista de Jules */}
-                <AbyssHUD
-                    particleCount={particleCount}
-                    playerCount={Object.keys(otherPlayers).length + 1}
-                />
-
-                {/* Portal de subida de archivos (Jules) */}
-                <UploadPortal />
-
-                <Canvas
-                    camera={{ position: [0, 0, 5], fov: 75 }}
-                    gl={{ antialias: false, powerPreference: 'high-performance' }}
+            {/* Botones permanentes en el HUD para invocar las interfaces si el teclado falla */}
+            <div style={{ position: 'absolute', bottom: '20px', right: '20px', display: 'flex', gap: '20px', zIndex: 50 }}>
+                <button
+                    onClick={() => setUploadOpen(true)}
+                    style={{ background: 'transparent', color: '#39FF14', border: '1px solid #39FF14', padding: '10px 20px', cursor: 'pointer', fontFamily: 'monospace', fontWeight: 'bold' }}
                 >
-                    <color attach="background" args={['#000000']} />
-
-                    {/* Navegación WASD con pointer lock */}
-                    <AbyssNavigator terminalOpen={terminalOpen} />
-
-                    {/* Partículas GPU — cada infección consume 1 */}
-                    <GPUFluidParticles count={particleCount} color="#39FF14" />
-
-                    {/* Cristales psicodélicos */}
-                    <ProceduralCrystal position={[0, 0, -8]} />
-                    <ProceduralCrystal position={[6, -3, -12]} />
-
-                    {/* Galería de archivos 3D (Jules) */}
-                    <AbyssGallery />
-
-                    {/* Otros jugadores */}
-                    {Object.entries(otherPlayers).map(([id, pos]) => (
-                        <mesh key={id} position={[pos.x, pos.y, pos.z - 5]}>
-                            <sphereGeometry args={[0.2, 16, 16]} />
-                            <meshBasicMaterial color="#ff00ea" wireframe />
-                        </mesh>
-                    ))}
-
-                    {/* Infecciones flotando en 3D */}
-                    <React.Suspense fallback={null}>
-                        {infecciones.map((inf, i) => (
-                            <InfectionText
-                                key={inf.id || i}
-                                mensaje={inf.mensaje}
-                                color={inf.color}
-                                position={[
-                                    (Math.sin(i * 2.4) * 12),
-                                    (Math.cos(i * 1.7) * 8),
-                                    (Math.sin(i * 0.9) * 15) - 10,
-                                ]}
-                            />
-                        ))}
-                    </React.Suspense>
-
-                    {/* Entidades físicas */}
-                    <React.Suspense fallback={null}>
-                        {entities.map((props, i) => (
-                            <DisturbedEntity key={i} {...props} audioLow={audioLow} />
-                        ))}
-                    </React.Suspense>
-
-                    <AggressivePostProcessing />
-                </Canvas>
+                    ◈ SUBIR ARCHIVO
+                </button>
+                <button
+                    onClick={() => setTerminalOpen(true)}
+                    style={{ background: '#39FF14', color: '#000', border: 'none', padding: '10px 20px', cursor: 'pointer', fontFamily: 'monospace', fontWeight: 'bold' }}
+                >
+                    INFECTAR EL ABISMO
+                </button>
             </div>
 
-            {/* Terminal de infecciones (overlay) */}
-            <button
-                onClick={() => setTerminalOpen(v => !v)}
-                style={{
-                    position: 'fixed',
-                    bottom: '20px',
-                    right: '20px',
-                    background: 'rgba(0,5,0,0.85)',
-                    border: '1px solid #39FF14',
-                    color: '#39FF14',
-                    fontFamily: "'Courier New', monospace",
-                    fontSize: '11px',
-                    letterSpacing: '2px',
-                    padding: '10px 16px',
-                    cursor: 'pointer',
-                    zIndex: 999,
-                    boxShadow: '0 0 20px rgba(57,255,20,0.4)',
-                }}
+            <Canvas
+                camera={{ position: [0, 0, 5], fov: 75 }}
+                gl={{ antialias: false, powerPreference: "high-performance" }} // El antialias está apagado a propósito para texturas rasposas
             >
-                {terminalOpen ? '◈ CERRAR TERMINAL' : '◈ INFECTAR EL ABISMO'}
-            </button>
+                <color attach="background" args={['#000000']} />
 
-            <InfectionTerminal
-                visible={terminalOpen}
-                onClose={() => setTerminalOpen(false)}
-            />
-        </>
+                <NauseatingCamera audioLow={audioLow} socket={socket} />
+                <GPUFluidParticles count={particleCount} color="#39FF14" />
+
+                {/* --- RENDER DE OTROS JUGADORES (FANTASMAS) --- */}
+                {Object.entries(otherPlayers).map(([id, pos]) => (
+                    <mesh key={id} position={[pos.x, pos.y, pos.z - 5]}>
+                        <sphereGeometry args={[0.2, 16, 16]} />
+                        <meshBasicMaterial color="red" wireframe />
+                    </mesh>
+                ))}
+
+                <React.Suspense fallback={null}>
+                    {entities.map((props, i) => (
+                        <DisturbedEntity key={i} {...props} audioLow={audioLow} />
+                    ))}
+                </React.Suspense>
+
+                <AbyssGallery />
+                <AggressivePostProcessing />
+            </Canvas>
+        </div>
     );
 }

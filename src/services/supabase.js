@@ -32,11 +32,10 @@ export async function insertInfection(mensaje, color = '#ffffff') {
  */
 export function subscribeToInfections(callback) {
   return supabase
-    .channel('public:infecciones')
-    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'infecciones' }, payload => {
-      callback(payload.new)
-    })
-    .subscribe()
+    .channel('infecciones-realtime')
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'infecciones' },
+      (payload) => callback(payload.new))
+    .subscribe();
 }
 
 /**

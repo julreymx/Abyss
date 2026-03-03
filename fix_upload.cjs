@@ -1,4 +1,6 @@
+const fs = require('fs');
 
+let newContent = `
 import React, { useState } from 'react';
 import { supabase } from '../services/supabase';
 
@@ -15,7 +17,7 @@ export default function UploadPortal({ isOpen, onClose }) {
         setStatus('UPLOAD IN PROGRESS...');
 
         try {
-            const fileName = \`\${Date.now()}_\${file.name}\`;
+            const fileName = \\\`\\\${Date.now()}_\\\${file.name}\\\`;
             const { data: uploadData, error: uploadError } = await supabase.storage
                 .from('archivos-abyss')
                 .upload(fileName, file);
@@ -118,3 +120,6 @@ export default function UploadPortal({ isOpen, onClose }) {
         </div>
     );
 }
+`;
+
+fs.writeFileSync('src/gallery/UploadPortal.jsx', newContent);

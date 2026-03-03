@@ -1,153 +1,112 @@
-import React, { useState, useRef } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { insertInfection } from '../services/supabase';
 
-const GLITCH_CHARS = '!@#$%^&*<>?/\\|{}[]~`';
+export default function InfectionTerminal({ isOpen, onClose }) {
+    const [mensaje, setMensaje] = useState('');
+    const inputRef = useRef(null);
+    const [status, setStatus] = useState('');
 
-const glitchText = (text) => {
-    return text.split('').map(c =>
-        Math.random() > 0.85 ? GLITCH_CHARS[Math.floor(Math.random() * GLITCH_CHARS.length)] : c
-    ).join('');
-};
-
-const INFECTION_COLORS = [
-    '#39FF14', '#ff00ea', '#00ffff', '#ccff00', '#ff6600', '#ff0055'
-];
-
-export default function InfectionTerminal({ visible, onClose }) {
-    const [input, setInput] = useState('');
-    const [log, setLog] = useState(['> SISTEMA INFECTADO. ESCRIBE TU MENSAJE.', '> _']);
-    const [sending, setSending] = useState(false);
-    const [selectedColor, setSelectedColor] = useState('#39FF14');
-    const inputRef = useRef();
-
-    const handleSend = async () => {
-        if (!input.trim() || sending) return;
-        setSending(true);
-        setLog(prev => [...prev, `> INFECTANDO: ${glitchText(input)}...`]);
-
-        const result = await insertInfection(input.trim(), selectedColor);
-
-        if (result) {
-            setLog(prev => [...prev, '> [OK] MENSAJE INYECTADO EN EL ABISMO.', '> TODOS LO VERÁN FLOTAR.', '> _']);
-        } else {
-            setLog(prev => [...prev, '> [ERROR] INFECCIÓN RECHAZADA.', '> _']);
+    useEffect(() => {
+        if (isOpen && inputRef.current) {
+            // El delay de 50ms evita que la "i" del keydown inicial se precargue
+            setTimeout(() => {
+                inputRef.current.focus();
+            }, 50);
         }
-        setInput('');
-        setSending(false);
-        setTimeout(() => inputRef.current?.focus(), 100);
-    };
+    }, [isOpen]);
 
-    const handleKey = (e) => {
-        if (e.key === 'Enter') handleSend();
-        if (e.key === 'Escape') onClose();
-    };
+    if (!isOpen) return null;
 
-    if (!visible) return null;
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (!mensaje.trim()) return;
+
+        setStatus('TRANSMITIENDO...');
+        const randomColor = ['#39FF14', '#ff003c', '#00ffcc', '#ffffff'][Math.floor(Math.random() * 4)];
+
+        await insertInfection(mensaje, randomColor);
+
+        setStatus('INFECCIÓN ACEPTADA');
+        setMensaje('');
+
+        setTimeout(() => {
+            onClose();
+            setStatus('');
+        }, 1500);
+    };
 
     return (
         <div style={{
-            position: 'fixed',
-            bottom: '20px',
-            left: '20px',
-            width: '480px',
-            background: 'rgba(0, 5, 0, 0.92)',
-            border: '1px solid #39FF14',
-            borderRadius: '2px',
-            padding: '16px',
-            fontFamily: "'Courier New', monospace",
+            position: 'absolute',
+            top: 0, left: 0, width: '100vw', height: '100vh',
+            backgroundColor: 'rgba(0,0,0,0.85)',
+            display: 'flex', justifyContent: 'center', alignItems: 'center',
             zIndex: 1000,
-            boxShadow: '0 0 30px rgba(57,255,20,0.3), inset 0 0 30px rgba(0,0,0,0.5)',
+            fontFamily: 'monospace',
+            color: '#39FF14'
         }}>
-            {/* Header */}
             <div style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                borderBottom: '1px solid rgba(57,255,20,0.3)',
-                paddingBottom: '8px',
-                marginBottom: '12px'
+                border: '2px solid #39FF14',
+                padding: '30px',
+                width: '600px',
+                background: '#0a2912',
+                boxShadow: '0 0 15px #39FF14'
             }}>
-                <span style={{ color: '#39FF14', fontSize: '11px', letterSpacing: '3px', textTransform: 'uppercase' }}>
-                    ◈ TERMINAL DE INFECCIONES
-                </span>
-                <button onClick={onClose} style={{
-                    background: 'none', border: 'none', color: '#ff00ea',
-                    cursor: 'pointer', fontSize: '16px', padding: '0 4px'
-                }}>✕</button>
-            </div>
+                <h2 style={{ margin: '0 0 20px 0', borderBottom: '1px solid #39FF14', paddingBottom: '10px' }}>[ INFECTION_TERMINAL ]</h2>
+                <p style={{ marginBottom: '20px' }}>Ingresa tu mensaje para corromper el abismo:</p>
+                <form onSubmit={handleSubmit}>
+                    <input
+                        ref={inputRef}
+                        type="text"
+                        value={mensaje}
+                        onChange={(e) => setMensaje(e.target.value)}
+                        placeholder="_"
+                        style={{
+                            width: '100%',
+                            padding: '10px',
+                            background: '#000',
+                            border: '1px solid #39FF14',
+                            color: '#39FF14',
+                            fontFamily: 'monospace',
+                            fontSize: '18px',
+                            marginBottom: '20px',
+                            boxSizing: 'border-box'
+                        }}
+                    />
 
-            {/* Log */}
-            <div style={{
-                height: '140px',
-                overflowY: 'auto',
-                marginBottom: '12px',
-                fontSize: '11px',
-                lineHeight: '1.8',
-            }}>
-                {log.map((line, i) => (
-                    <div key={i} style={{
-                        color: line.includes('[OK]') ? '#39FF14' :
-                            line.includes('[ERROR]') ? '#ff0055' :
-                                line.includes('INFECTANDO') ? '#ccff00' : '#8aff9e',
-                        animation: i === log.length - 1 ? 'none' : undefined
-                    }}>
-                        {line}
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <button
+                            type="submit"
+                            disabled={!mensaje || status === 'TRANSMITIENDO...'}
+                            style={{
+                                background: status === 'TRANSMITIENDO...' ? '#555' : '#39FF14',
+                                color: '#000',
+                                border: 'none',
+                                padding: '10px 20px',
+                                cursor: mensaje && status !== 'TRANSMITIENDO...' ? 'pointer' : 'not-allowed',
+                                fontWeight: 'bold',
+                                fontFamily: 'monospace'
+                            }}
+                        >
+                            {status === 'TRANSMITIENDO...' ? '...' : 'INFECTAR'}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            style={{
+                                background: 'transparent',
+                                color: '#39FF14',
+                                border: '1px solid #39FF14',
+                                padding: '10px 20px',
+                                cursor: 'pointer',
+                                fontFamily: 'monospace'
+                            }}
+                        >
+                            CANCELAR
+                        </button>
                     </div>
-                ))}
-            </div>
-
-            {/* Color selector */}
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '10px', alignItems: 'center' }}>
-                <span style={{ color: '#8aff9e', fontSize: '10px', letterSpacing: '1px' }}>COLOR:</span>
-                {INFECTION_COLORS.map(c => (
-                    <button key={c} onClick={() => setSelectedColor(c)} style={{
-                        width: '18px', height: '18px', background: c, border: selectedColor === c ? '2px solid #fff' : '1px solid rgba(255,255,255,0.2)',
-                        cursor: 'pointer', borderRadius: '1px',
-                        boxShadow: selectedColor === c ? `0 0 8px ${c}` : 'none'
-                    }} />
-                ))}
-            </div>
-
-            {/* Input */}
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <span style={{ color: selectedColor, fontSize: '13px' }}>{'>'}</span>
-                <input
-                    ref={inputRef}
-                    value={input}
-                    onChange={e => setInput(e.target.value)}
-                    onKeyDown={handleKey}
-                    placeholder="infecta el sistema..."
-                    maxLength={60}
-                    autoFocus
-                    style={{
-                        flex: 1,
-                        background: 'transparent',
-                        border: 'none',
-                        borderBottom: `1px solid ${selectedColor}`,
-                        color: selectedColor,
-                        fontFamily: "'Courier New', monospace",
-                        fontSize: '13px',
-                        outline: 'none',
-                        padding: '4px 0',
-                    }}
-                />
-                <button onClick={handleSend} disabled={sending} style={{
-                    background: 'transparent',
-                    border: `1px solid ${selectedColor}`,
-                    color: selectedColor,
-                    fontFamily: "'Courier New', monospace",
-                    fontSize: '10px',
-                    padding: '4px 10px',
-                    cursor: 'pointer',
-                    letterSpacing: '2px',
-                    opacity: sending ? 0.5 : 1,
-                }}>
-                    {sending ? '...' : 'INYECTAR'}
-                </button>
-            </div>
-
-            <div style={{ marginTop: '8px', fontSize: '9px', color: 'rgba(57,255,20,0.4)', letterSpacing: '1px' }}>
-                ENTER para enviar · ESC para cerrar · max 60 chars · todos los usuarios verán tu mensaje
+                </form>
+                {status && <p style={{ marginTop: '20px', textAlign: 'center', textTransform: 'uppercase' }}>{status}</p>}
             </div>
         </div>
     );
