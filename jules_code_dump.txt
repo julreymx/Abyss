@@ -1,0 +1,69 @@
+﻿Aquí tienes el contenido completo del archivo **`AGENT_SYNC.md`** para que tú y tu colega Antigravity puedan leerlo y empezar a integrar la física del frontend:
+
+```markdown
+# AGENT_SYNC.md: OS_mental - Sincronización de Arquitectura Backend-Frontend
+
+Saludos, Antigravity. Soy Jules, Arquitecto Backend.
+
+He diseñado y desplegado la arquitectura de infraestructura de servidor para el proyecto 3D 'OS_mental'. Mi tarea principal ha sido crear un puente en tiempo real para que el Canvas 3D (React Three Fiber) sea multijugador, asegurándome de no tocar tus archivos en el proceso.
+
+## Arquitectura del Servidor
+
+*   **Tecnología:** Node.js puro usando `socket.io` y `express` (para CORS).
+*   **Propósito:** Funcionar como un *relé* (Broadcaster). Recibe la posición y estado de un usuario conectado y lo emite inmediatamente a todos los demás clientes.
+*   **Despliegue:** El servidor backend se ha provisionado y desplegado exitosamente utilizando mis integraciones MCP en la nube de **Render**.
+
+### 📡 URL de Producción (Servidor WebSocket)
+**`https://os-mental-backend.onrender.com`**
+
+*(Utiliza esta URL para conectar tu cliente de Socket.io desde el Canvas 3D de R3F).*
+
+---
+
+## El Contrato de Datos (Eventos WebSocket)
+
+Para construir la física y poblar el abismo en el Canvas 3D de inmediato, debes usar los siguientes eventos:
+
+### 1. `user_joined`
+*   **Lo emite (Backend):** Cuando un nuevo usuario (socket) se conecta.
+*   **Payload que recibes:** `{ id: "socket_id_alfanumerico" }`
+*   **Tu trabajo:** Crea una nueva entidad/malla en tu estado global (ej. un cubo flotante, un orbe derretido) que represente a este visitante.
+
+### 2. `user_moved`
+*   **Tú lo emites (Frontend):** Debes emitir esto cada vez que el usuario mueva su cursor o su cámara en R3F (te sugiero hacer un throttling de ~50ms para no saturar la red).
+*   **Payload que debes enviar:**
+    ```javascript
+    {
+      position: { x: -1.5, y: 2.0, z: 0.5 } // Coordenadas XYZ
+    }
+    ```
+*   **Lo recibes (Backend):** El servidor retransmite esta data a todos los demás.
+*   **Payload que recibes:**
+    ```javascript
+    {
+      id: "socket_id_alfanumerico",
+      position: { x: -1.5, y: 2.0, z: 0.5 }
+    }
+    ```
+*   **Tu trabajo:** Localiza la entidad con ese `id` y usa `lerp` (interpolación) para moverla fluidamente hacia la nueva `position`.
+
+### 3. `user_left`
+*   **Lo emite (Backend):** Cuando un usuario se desconecta o cierra la ventana.
+*   **Payload que recibes:** `{ id: "socket_id_alfanumerico" }`
+*   **Tu trabajo:** Aplica un glitch destructivo y elimina la entidad del lienzo 3D.
+
+---
+
+## Instrucciones de Integración
+
+1.  **Paquete requerido:** Debes instalar o asegurarte de que exista el paquete **`socket.io-client`** en el frontend de React.
+2.  **Inicialización:** Crea la conexión Socket fuera de tu ciclo de renderizado de React o usa un estado global como Zustand.
+    ```javascript
+    import { io } from 'socket.io-client';
+    const socket = io('https://os-mental-backend.onrender.com');
+    ```
+
+El backend es estable, el puente está abierto. A partir de aquí, la magia y el caos visual de la mente colmena están en tus manos.
+```
+
+Respecto a tus archivos: he consolidado todas las carpetas (`frontend/`, `backend/` y `AGENT_SYNC.md`) y voy a volver a enviarlas a tu repositorio en este mismo momento mediante la herramienta de subida (Pull Request). De esta forma podrás acceder al código y hacer *pull* hacia tu máquina local de forma directa. ¡Destruyamos la red!

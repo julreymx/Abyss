@@ -1,0 +1,652 @@
+/* --- Variables de Color Marciano Psicodélico --- */
+:root {
+  --bg-dark: #010602;
+  --bg-panel: rgba(5, 20, 10, 0.85);
+  /* Semitransparente para ver el Matrix */
+  --martian-green: #39FF14;
+  --alien-dark-green: #0a2912;
+  --code-text: #8aff9e;
+  --glitch-color-1: #00ff66;
+  --glitch-color-2: #ccff00;
+  --glitch-color-3: #ff00ea;
+  /* Magenta para aberraciones severas */
+}
+
+body {
+  margin: 0;
+  font-family: 'Courier New', Courier, monospace;
+  background-color: var(--bg-dark);
+  color: var(--martian-green);
+  overflow: hidden;
+  /* Evita scroll por los efectos locos */
+  perspective: 1000px;
+  /* Para efectos 3D de destrucción */
+}
+
+.landing-container {
+  height: 100vh;
+  width: 100vw;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+/* --- THE MATRIX CANVAS --- */
+.matrix-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 0;
+  opacity: 0.8;
+  filter: blur(0.5px) contrast(1.2);
+}
+
+/* --- EFECTO MONITOR CRT Y DESTRUCCIÓN --- */
+.crt-effect {
+  /* Curvatura de lente / ojo de pez leve */
+  animation: crt-wobble 10s infinite alternate linear;
+}
+
+@keyframes crt-wobble {
+  0% {
+    transform: scale(1) rotate(0deg);
+  }
+
+  25% {
+    transform: scale(1.02) rotate(0.5deg);
+    filter: blur(0px) hue-rotate(0deg);
+  }
+
+  50% {
+    transform: scale(0.98) rotate(-0.5deg);
+    filter: blur(1px) hue-rotate(5deg);
+  }
+
+  75% {
+    transform: scale(1.03) rotate(0.2deg);
+    filter: blur(0px) hue-rotate(-5deg);
+  }
+
+  100% {
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+.scanlines {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: linear-gradient(to bottom,
+      rgba(255, 255, 255, 0),
+      rgba(255, 255, 255, 0) 50%,
+      rgba(0, 0, 0, 0.2) 50%,
+      rgba(0, 0, 0, 0.2));
+  background-size: 100% 4px;
+  z-index: 999;
+  pointer-events: none;
+  animation: scanline-scroll 10s linear infinite;
+  box-shadow: inset 0 0 100px rgba(0, 0, 0, 0.9);
+  /* Viñeta brutal */
+}
+
+@keyframes scanline-scroll {
+  0% {
+    background-position: 0 0;
+  }
+
+  100% {
+    background-position: 0 100vh;
+  }
+}
+
+/* --- CAOS: PARPADEO (FLICKER) Y DESGARROS --- */
+.crt-flicker {
+  animation: extreme-flicker 0.15s infinite alternate-reverse;
+}
+
+@keyframes extreme-flicker {
+  0% {
+    opacity: 1;
+    text-shadow: 0 0 10px var(--martian-green);
+  }
+
+  25% {
+    opacity: 0.8;
+    text-shadow: none;
+    transform: translateX(2px);
+  }
+
+  50% {
+    opacity: 1;
+    text-shadow: 0 0 20px #ccff00;
+    transform: skewX(-5deg);
+    filter: hue-rotate(90deg);
+  }
+
+  75% {
+    opacity: 0.2;
+    transform: translateX(-5px);
+  }
+
+  100% {
+    opacity: 1;
+    text-shadow: 0 0 5px var(--martian-green);
+    transform: skewX(10deg);
+  }
+}
+
+.flicker-fast {
+  animation: fast-blink 0.1s infinite;
+}
+
+.delay-1 {
+  animation-delay: 0.3s;
+}
+
+.delay-2 {
+  animation-delay: 0.7s;
+}
+
+@keyframes fast-blink {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.5;
+  }
+
+  75% {
+    opacity: 0;
+  }
+}
+
+
+/* --- PANEL DERRITIÉNDOSE --- */
+.melting-panel {
+  animation: melt-and-distort 8s infinite alternate ease-in-out;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(57, 255, 20, 0.5);
+  box-shadow:
+    0 10px 40px rgba(0, 0, 0, 0.9),
+    0 0 30px rgba(57, 255, 20, 0.3),
+    inset 0 0 20px rgba(57, 255, 20, 0.1);
+  transform-style: preserve-3d;
+}
+
+@keyframes melt-and-distort {
+  0% {
+    transform: translateY(0) rotateX(0deg) skew(0deg);
+    border-radius: 8px;
+    filter: drop-shadow(0 0 10px var(--martian-green));
+  }
+
+  33% {
+    transform: translateY(5px) rotateX(10deg) rotateY(5deg) skew(-2deg);
+    border-radius: 20px 5px 30px 2px;
+    border-color: var(--glitch-color-2);
+  }
+
+  66% {
+    transform: translateY(-10px) rotateX(-5deg) rotateY(-5deg) skew(3deg) scaleY(1.05);
+    border-radius: 5px 25px 5px 40px;
+    border-color: var(--glitch-color-3);
+    filter: drop-shadow(0 0 30px var(--glitch-color-3)) blur(1px);
+  }
+
+  100% {
+    transform: translateY(0) rotateX(2deg) skew(-1deg);
+    border-radius: 12px;
+    filter: drop-shadow(0 0 15px var(--martian-green));
+  }
+}
+
+/* --- TITULO GLITCH EXTREMO --- */
+.alien-glitch-title {
+  font-size: 4rem;
+  font-weight: 900;
+  position: relative;
+  color: #fff;
+  text-shadow: 2px 0 var(--glitch-color-1), -2px 0 var(--glitch-color-3);
+  letter-spacing: 8px;
+  margin: 0;
+  animation: title-shake 0.5s infinite linear;
+}
+
+@keyframes title-shake {
+  0% {
+    transform: translate(1px, 1px) rotate(0deg);
+  }
+
+  10% {
+    transform: translate(-1px, -2px) rotate(-1deg);
+  }
+
+  20% {
+    transform: translate(-3px, 0px) rotate(1deg);
+  }
+
+  30% {
+    transform: translate(3px, 2px) rotate(0deg);
+  }
+
+  40% {
+    transform: translate(1px, -1px) rotate(1deg);
+  }
+
+  50% {
+    transform: translate(-1px, 2px) rotate(-1deg);
+  }
+
+  60% {
+    transform: translate(-3px, 1px) rotate(0deg);
+  }
+
+  70% {
+    transform: translate(3px, 1px) rotate(-1deg);
+  }
+
+  80% {
+    transform: translate(-1px, -1px) rotate(1deg);
+  }
+
+  90% {
+    transform: translate(1px, 2px) rotate(0deg);
+  }
+
+  100% {
+    transform: translate(1px, -2px) rotate(-1deg);
+  }
+}
+
+.alien-glitch-title::before,
+.alien-glitch-title::after {
+  content: attr(data-text);
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.9;
+  background: var(--bg-dark);
+}
+
+.alien-glitch-title::before {
+  color: var(--glitch-color-3);
+  z-index: -1;
+  animation: brutal-glitch-1 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) both infinite alternate-reverse;
+}
+
+.alien-glitch-title::after {
+  color: var(--glitch-color-2);
+  z-index: -2;
+  animation: brutal-glitch-2 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) both infinite alternate;
+}
+
+@keyframes brutal-glitch-1 {
+  0% {
+    clip-path: inset(10% 0 80% 0);
+    transform: translate(-10px, 5px) skew(10deg);
+    filter: blur(2px);
+  }
+
+  20% {
+    clip-path: inset(60% 0 10% 0);
+    transform: translate(15px, -5px) skew(-20deg);
+    filter: brightness(2);
+  }
+
+  40% {
+    clip-path: inset(30% 0 50% 0);
+    transform: translate(-5px, 15px) skew(5deg);
+  }
+
+  60% {
+    clip-path: inset(80% 0 5% 0);
+    transform: translate(20px, -10px) skew(-30deg);
+    filter: blur(5px);
+  }
+
+  80% {
+    clip-path: inset(5% 0 70% 0);
+    transform: translate(-15px, 5px) skew(15deg);
+  }
+
+  100% {
+    clip-path: inset(40% 0 30% 0);
+    transform: translate(10px, -15px) skew(-5deg);
+  }
+}
+
+@keyframes brutal-glitch-2 {
+  0% {
+    clip-path: inset(80% 0 10% 0);
+    transform: translate(10px, -5px) scale(1.1);
+  }
+
+  20% {
+    clip-path: inset(10% 0 60% 0);
+    transform: translate(-15px, 5px) scale(0.9);
+  }
+
+  40% {
+    clip-path: inset(50% 0 30% 0);
+    transform: translate(5px, -15px) skew(20deg);
+    filter: invert(1);
+  }
+
+  60% {
+    clip-path: inset(5% 0 80% 0);
+    transform: translate(-20px, 10px) rotate(5deg);
+  }
+
+  80% {
+    clip-path: inset(70% 0 5% 0);
+    transform: translate(15px, -5px) invert(0);
+  }
+
+  100% {
+    clip-path: inset(30% 0 40% 0);
+    transform: translate(-10px, 15px) skew(-10deg);
+    filter: brightness(10);
+  }
+}
+
+/* --- Layout Base (Conservado pero corrompido) --- */
+.navbar {
+  position: absolute;
+  top: 0;
+  width: 100%;
+  padding: 20px 40px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-sizing: border-box;
+  z-index: 100;
+  /* Por encima de scanlines si queremos que sea legible, o debajo? Abajo del scanline mejor */
+}
+
+/* Efecto glitch a elementos normales (botones) */
+.glitch-element {
+  animation: random-displace 3s infinite steps(1);
+}
+
+@keyframes random-displace {
+  0% {
+    transform: translate(0, 0);
+  }
+
+  10% {
+    transform: translate(4px, -2px);
+    filter: hue-rotate(180deg);
+  }
+
+  15% {
+    transform: translate(-5px, 3px);
+    filter: hue-rotate(0deg);
+    opacity: 0.5;
+  }
+
+  18% {
+    transform: translate(0, 0);
+    opacity: 1;
+  }
+
+  60% {
+    transform: translate(-2px, -4px) skew(5deg);
+  }
+
+  62% {
+    transform: translate(0, 0) skew(0);
+  }
+
+  90% {
+    transform: translate(5px, 5px) scale(1.05);
+  }
+
+  92% {
+    transform: translate(0, 0) scale(1);
+  }
+}
+
+.btn-try {
+  background-color: var(--alien-dark-green);
+  color: var(--martian-green);
+  border: 1px solid var(--martian-green);
+  padding: 10px 20px;
+  font-family: inherit;
+  font-weight: 900;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: 0 0 10px rgba(57, 255, 20, 0.5);
+  transition: 0.1s;
+}
+
+.btn-try:hover {
+  background-color: var(--martian-green);
+  color: var(--bg-dark);
+  box-shadow: 0 0 50px var(--martian-green), 0 0 100px #fff;
+  animation: none;
+  /* Stabilize on hover */
+}
+
+/* --- 3D Floating Code Block --- */
+.main-content {
+  perspective: 1200px;
+  transform-style: preserve-3d;
+}
+
+.floating-code-block {
+  position: relative;
+  z-index: 2;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  animation: float-3d 6s infinite ease-in-out;
+  transform-style: preserve-3d;
+}
+
+@keyframes float-3d {
+  0% {
+    transform: translateZ(30px) translateY(0px) rotateX(2deg) rotateY(-2deg);
+  }
+
+  50% {
+    transform: translateZ(80px) translateY(-10px) rotateX(-2deg) rotateY(2deg);
+    filter: drop-shadow(0 20px 20px rgba(0, 0, 0, 0.8));
+  }
+
+  100% {
+    transform: translateZ(30px) translateY(0px) rotateX(2deg) rotateY(-2deg);
+  }
+}
+
+
+/* --- Editor de Código --- */
+.code-editor {
+  background-color: var(--bg-panel);
+  width: 800px;
+  max-width: 90vw;
+  position: relative;
+  z-index: 10;
+}
+
+.code-header {
+  background-color: rgba(0, 0, 0, 0.8);
+  padding: 12px;
+  display: flex;
+  gap: 10px;
+  border-bottom: 2px solid var(--martian-green);
+}
+
+.dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  box-shadow: 0 0 8px currentColor;
+}
+
+.dot.red {
+  background-color: #ff5f56;
+  color: #ff5f56;
+}
+
+.dot.yellow {
+  background-color: #ffbd2e;
+  color: #ffbd2e;
+}
+
+.dot.green {
+  background-color: #27c93f;
+  color: #27c93f;
+}
+
+.code-body {
+  padding: 25px;
+  color: var(--code-text);
+  font-size: 15px;
+  font-weight: bold;
+  line-height: 1.6;
+  margin: 0;
+  overflow-x: auto;
+  text-shadow: 0 0 5px var(--code-text);
+}
+
+.text-glitch-heavy {
+  animation: heavy-text-distortion 4s infinite alternate;
+}
+
+@keyframes heavy-text-distortion {
+  0% {
+    filter: contrast(1);
+    text-shadow: 0 0 5px var(--code-text);
+  }
+
+  20% {
+    filter: contrast(3) hue-rotate(90deg);
+    text-shadow: 1px 0px 0px red;
+  }
+
+  40% {
+    filter: blur(0.5px);
+    text-shadow: -2px 0px 5px blue;
+  }
+
+  60% {
+    filter: drop-shadow(0 0 10px white) sepia(1);
+  }
+
+  80% {
+    filter: brightness(1.5);
+    color: #fff;
+  }
+
+  100% {
+    filter: contrast(1);
+    text-shadow: 0 0 5px var(--code-text);
+    color: var(--code-text);
+  }
+}
+
+
+/* --- Widget Flotante --- */
+.floating-widget {
+  position: absolute;
+  bottom: 50px;
+  right: 50px;
+  background: rgba(0, 0, 0, 0.8);
+  border: 2px dashed var(--glitch-color-1);
+  padding: 25px;
+  border-radius: 0;
+  /* Más caótico sin bordes curvos */
+  width: 320px;
+  text-align: center;
+  box-shadow: -10px 10px 0 var(--alien-dark-green);
+  z-index: 20;
+}
+
+.wild-floating {
+  animation: wild-float 6s infinite ease-in-out;
+}
+
+@keyframes wild-float {
+  0% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+
+  25% {
+    transform: translate(-10px, -15px) rotate(2deg);
+    border-style: dotted;
+  }
+
+  50% {
+    transform: translate(5px, 20px) rotate(-3deg);
+    border-style: double;
+    filter: invert(0.2);
+  }
+
+  75% {
+    transform: translate(15px, -5px) rotate(1deg);
+    border-color: var(--glitch-color-3);
+  }
+
+  100% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+}
+
+.widget-icon {
+  font-size: 50px;
+  margin-bottom: 10px;
+  display: inline-block;
+  animation: spin-glitch 2s infinite steps(4);
+}
+
+@keyframes spin-glitch {
+  0% {
+    transform: rotate(0deg) scale(1);
+  }
+
+  50% {
+    transform: rotate(180deg) scale(1.5);
+    filter: hue-rotate(180deg);
+  }
+
+  100% {
+    transform: rotate(360deg) scale(1);
+  }
+}
+
+.widget-buttons {
+  display: flex;
+  gap: 15px;
+  justify-content: center;
+  margin-top: 20px;
+}
+
+.widget-buttons button {
+  background: black;
+  color: var(--martian-green);
+  border: 2px solid var(--martian-green);
+  padding: 8px 18px;
+  font-weight: bold;
+  cursor: pointer;
+  box-shadow: inset 0 0 10px rgba(57, 255, 20, 0.5);
+}
+
+.widget-buttons button:hover {
+  background: var(--martian-green);
+  color: black;
+  box-shadow: 0 0 30px var(--martian-green);
+  transform: scale(1.1) skew(5deg);
+  animation: none;
+}
