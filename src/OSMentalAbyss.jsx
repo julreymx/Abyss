@@ -8,14 +8,24 @@ import { extend } from '@react-three/fiber';
 import { useMultiplayer } from './multiplayer/useSockets';
 import AbyssHUD from './components/AbyssHUD';
 import GPUFluidParticles from './components/experimental/GPUFluidParticles';
-import ProceduralCrystal from './components/experimental/ProceduralCrystal';
+import ProceduralCrystal, { BlobPair } from './components/experimental/ProceduralCrystal';
 import AbyssGallery from './gallery/AbyssGallery';
 import UploadPortal from './gallery/UploadPortal';
 import InfectionTerminal from './components/InfectionTerminal';
+import InfectionNavigator from './components/InfectionNavigator';
 import AbyssNavigator from './controls/AbyssNavigator';
 import CenterRaycaster from './controls/CenterRaycaster';
 import { getRecentInfections, subscribeToInfections } from './services/supabase';
 import NazarCrosshair from './components/NazarCrosshair';
+
+// Font key → CSS (same map as InfectionTerminal/InfectionNavigator)
+const FONT_MAP = {
+    'mono':       "'Courier New', monospace",
+    'vt323':      "'VT323', monospace",
+    'share-tech': "'Share Tech Mono', monospace",
+    'orbitron':   "'Orbitron', sans-serif",
+    'creepster':  "'Creepster', cursive",
+};
 
 // ----------------------------------------------------------------------
 // 1. SHADERS ENFERMOS (GLSL)
@@ -85,7 +95,7 @@ const AudioAnalyzer = ({ setAudioLow }) => {
 // ----------------------------------------------------------------------
 // 3. ENTIDAD FÍSICA
 // ----------------------------------------------------------------------
-const DisturbedEntity = React.memo(({ position, rotation, audioLow, videoUrl }) => {
+const DisturbedEntity = React.memo(({ position, audioLow, videoUrl }) => {
     const meshRef = useRef();
     const materialRef = useRef();
     const [hovered, setHover] = useState(false);
@@ -103,8 +113,8 @@ const DisturbedEntity = React.memo(({ position, rotation, audioLow, videoUrl }) 
             materialRef.current.uHover = targetHover.current;
         }
         if (meshRef.current) {
-            meshRef.current.rotation.x += delta * 0.05;
-            meshRef.current.rotation.y += delta * 0.08;
+            // Billboard: siempre mirar a la cámara
+            meshRef.current.lookAt(state.camera.position);
             if (hovered) {
                 meshRef.current.position.z -= delta * 2.0;
             } else {
@@ -115,7 +125,7 @@ const DisturbedEntity = React.memo(({ position, rotation, audioLow, videoUrl }) 
     });
 
     return (
-        <mesh ref={meshRef} position={position} rotation={rotation}
+        <mesh ref={meshRef} position={position}
             userData={{ hoverable: true }}
             onPointerOver={() => { setHover(true); window.dispatchEvent(new CustomEvent('abyss:hover', { detail: { active: true } })); }}
             onPointerOut={() => { setHover(false); window.dispatchEvent(new CustomEvent('abyss:hover', { detail: { active: false } })); }}>
@@ -129,23 +139,34 @@ DisturbedEntity.displayName = 'DisturbedEntity';
 // ----------------------------------------------------------------------
 // 4. TEXTO DE INFECCIÓN FLOTANTE
 // ----------------------------------------------------------------------
-const InfectionText = React.memo(({ mensaje, color, position }) => {
-    const ref = useRef();
-    const offset = useRef(Math.random() * Math.PI * 2);
+const InfectionText = React.memo(({ mensaje, color, position, index, font }) => {
+    const ref    = useRef();
+    const offset = useRef((index ?? 0) * 1.37 + 0.5);
+
     useFrame((state) => {
         if (ref.current) {
-            ref.current.position.y += Math.sin(state.clock.elapsedTime * 0.4 + offset.current) * 0.003;
-            ref.current.rotation.y += 0.004;
+            ref.current.position.y += Math.sin(state.clock.elapsedTime * 0.35 + offset.current) * 0.004;
+            ref.current.rotation.y += 0.003;
         }
     });
+
+    const depth   = Math.abs(Math.sin((index ?? 0) * 1.618)) * 32 + 14;
+    const glow    = color || '#39FF14';
+    const fontCss = FONT_MAP[font] || FONT_MAP.mono;
+
     return (
-        <mesh ref={ref} position={position}>
-            <Html center distanceFactor={8} style={{
-                color: color || '#39FF14',
-                fontFamily: "'Courier New', monospace",
-                fontSize: '13px', fontWeight: 'bold', letterSpacing: '2px',
-                textShadow: `0 0 8px ${color || '#39FF14'}, 0 0 20px ${color || '#39FF14'}`,
-                whiteSpace: 'nowrap', userSelect: 'none', pointerEvents: 'none',
+        <mesh ref={ref} position={position} frustumCulled={false}>
+            <Html center distanceFactor={14} style={{
+                color: glow,
+                fontFamily: fontCss,
+                fontSize: `${depth}px`,
+                fontWeight: 'bold',
+                letterSpacing: '3px',
+                textShadow: `0 0 10px ${glow}, 0 0 30px ${glow}, 0 0 50px ${glow}`,
+                whiteSpace: 'nowrap',
+                userSelect: 'none',
+                pointerEvents: 'none',
+                textTransform: 'uppercase',
             }}>
                 {mensaje}
             </Html>
@@ -182,10 +203,12 @@ const AggressivePostProcessing = () => {
 // 6. OS_MENTAL_ABYSS — ENTRY POINT
 // ----------------------------------------------------------------------
 export default function OSMentalAbyss() {
-    const [audioLow, setAudioLow] = useState(0);
+    const [audioLow, setAudioLow]     = useState(0);
     const [infecciones, setInfecciones] = useState([]);
     const [terminalOpen, setTerminalOpen] = useState(false);
-    const [uploadOpen, setUploadOpen] = useState(false);
+    const [uploadOpen, setUploadOpen]   = useState(false);
+    const [isPointerLocked, setIsPointerLocked] = useState(false);
+    const [assetPreview, setAssetPreview] = useState(null); // { url, tipo, nombre }
     const { socket, otherPlayers } = useMultiplayer();
 
     // Set de IDs ya vistos — persiste entre re-renders, sobrevive StrictMode
@@ -195,8 +218,9 @@ export default function OSMentalAbyss() {
     const addInfeccion = (inf) => {
         if (!inf?.id || seenIds.current.has(inf.id)) return;
         seenIds.current.add(inf.id);
-        setInfecciones(prev => [inf, ...prev].slice(0, 5000));
+        setInfecciones(prev => [inf, ...prev].slice(0, 150)); // máx 150 infecciones visibles
     };
+
 
     // Hidratar con infecciones existentes + suscribirse a nuevas en tiempo real
     useEffect(() => {
@@ -213,6 +237,13 @@ export default function OSMentalAbyss() {
         };
     }, []);
 
+    // Escuchar cambios de pointer lock
+    useEffect(() => {
+        const onLockChange = (e) => setIsPointerLocked(e.detail.locked);
+        window.addEventListener('abyss:lockchange', onLockChange);
+        return () => window.removeEventListener('abyss:lockchange', onLockChange);
+    }, []);
+
     // Shortcuts de teclado [I] y [U]
     useEffect(() => {
         const onKey = (e) => {
@@ -225,41 +256,135 @@ export default function OSMentalAbyss() {
         return () => window.removeEventListener('keydown', onKey);
     }, []);
 
-    // Cada infección consume 1 partícula
-    const particleCount = Math.max(0, 5000 - infecciones.length);
-
-    // Entidades físicas — distribuidas dentro de la nube de partículas (radio 18)
-    const entities = useMemo(() => {
-        // Semilla determinista para posiciones consistentes
-        let s = 42;
-        const rng = () => { s = (s * 1664525 + 1013904223) & 0xffffffff; return (s >>> 0) / 0xffffffff; };
-        return Array.from({ length: 20 }).map(() => {
-            const theta = rng() * Math.PI * 2;
-            const phi = Math.acos((rng() * 2) - 1);
-            const r = (rng() * 0.5 + 0.3) * 16; // entre 5 y 16 unidades del centro
-            return {
-                position: [
-                    r * Math.sin(phi) * Math.cos(theta),
-                    r * Math.sin(phi) * Math.sin(theta),
-                    r * Math.cos(phi) - 5,
-                ],
-                rotation: [rng() * Math.PI, rng() * Math.PI, rng() * Math.PI],
-                videoUrl: null,
-            };
-        });
+    // Escuchar apertura de asset (guard: ignorar si ya hay popup abierto)
+    const assetPreviewRef = useRef(null);
+    useEffect(() => {
+        const handler = (e) => {
+            if (assetPreviewRef.current) return; // ya abierto, ignorar
+            document.exitPointerLock?.();
+            assetPreviewRef.current = e.detail;
+            setAssetPreview(e.detail);
+        };
+        window.addEventListener('abyss:assetopen', handler);
+        return () => window.removeEventListener('abyss:assetopen', handler);
     }, []);
 
-    // Posiciones de cristales dentro de la nube
-    const crystalPositions = useMemo(() => [
-        [2, 4, -6], [-5, -3, -10], [8, -5, -4], [-7, 6, -8],
-        [0, -8, -12], [5, 7, -9], [-3, 0, -14],
+    const closePreview = () => {
+        assetPreviewRef.current = null;
+        setAssetPreview(null);
+    };
+
+    // Partículas: fijas siempre 5000 (las infecciones no las consumen)
+    const particleCount = 5000;
+
+    // Pods de blobs (pares rojo+azul) con personalidad única cada uno
+    const blobPods = useMemo(() => [
+        // Pod 0 — lento y majestuoso
+        { center: [4, 8, -12],    orbitRadius: 2.0, orbitPhase: 0.4, floatSpeed: 0.3, floatAmp: 1.2,
+          redParams:  { size: 0.55, deformFreq: 1.8, deformAmp: 0.35, pulseSpeed: 1.2, pulseAmp: 0.16, rotSpeedX: 0.10, rotSpeedY: 0.22 },
+          blueParams: { size: 0.38, deformFreq: 3.1, deformAmp: 0.18, pulseSpeed: 2.8, pulseAmp: 0.06, rotSpeedX: 0.28, rotSpeedY: 0.12 } },
+        // Pod 1 — rápido y juguetón
+        { center: [-10, -6, -20], orbitRadius: 1.2, orbitPhase: 2.1, floatSpeed: 0.9, floatAmp: 0.5,
+          redParams:  { size: 0.32, deformFreq: 3.5, deformAmp: 0.28, pulseSpeed: 3.2, pulseAmp: 0.22, rotSpeedX: 0.38, rotSpeedY: 0.44 },
+          blueParams: { size: 0.45, deformFreq: 2.2, deformAmp: 0.40, pulseSpeed: 1.5, pulseAmp: 0.14, rotSpeedX: 0.15, rotSpeedY: 0.31 } },
+        // Pod 2 — asimétrico (grande vs diminuto)
+        { center: [14, -8, -10],  orbitRadius: 1.6, orbitPhase: 4.8, floatSpeed: 0.55, floatAmp: 1.0,
+          redParams:  { size: 0.65, deformFreq: 1.5, deformAmp: 0.45, pulseSpeed: 0.8, pulseAmp: 0.25, rotSpeedX: 0.06, rotSpeedY: 0.14 },
+          blueParams: { size: 0.20, deformFreq: 4.2, deformAmp: 0.12, pulseSpeed: 4.5, pulseAmp: 0.08, rotSpeedX: 0.55, rotSpeedY: 0.62 } },
+        // Pod 3 — nervioso, deformación extrema
+        { center: [-12, 14, -18], orbitRadius: 1.4, orbitPhase: 1.6, floatSpeed: 1.2, floatAmp: 0.7,
+          redParams:  { size: 0.35, deformFreq: 4.8, deformAmp: 0.55, pulseSpeed: 4.0, pulseAmp: 0.30, rotSpeedX: 0.50, rotSpeedY: 0.60 },
+          blueParams: { size: 0.42, deformFreq: 4.0, deformAmp: 0.50, pulseSpeed: 3.5, pulseAmp: 0.25, rotSpeedX: 0.42, rotSpeedY: 0.50 } },
+        // Pod 4 — lejano, enorme relativo, lentísimo
+        { center: [2, -18, -28],  orbitRadius: 2.8, orbitPhase: 3.3, floatSpeed: 0.2, floatAmp: 1.8,
+          redParams:  { size: 0.72, deformFreq: 1.2, deformAmp: 0.22, pulseSpeed: 0.6, pulseAmp: 0.10, rotSpeedX: 0.04, rotSpeedY: 0.08 },
+          blueParams: { size: 0.58, deformFreq: 1.6, deformAmp: 0.28, pulseSpeed: 0.9, pulseAmp: 0.12, rotSpeedX: 0.07, rotSpeedY: 0.05 } },
     ], []);
 
     return (
         <>
-            <div style={{ width: '100vw', height: '100vh', background: '#000', overflow: 'hidden', margin: 0, padding: 0, cursor: 'none' }}>
+            {/* ── POPUP DE ASSET ──────────────────────────────────────────── */}
+            {assetPreview && (
+                <div
+                    onClick={closePreview}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    style={{
+                        position: 'fixed', inset: 0, zIndex: 99999,
+                        background: 'rgba(0,0,0,0.92)',
+                        display: 'flex', flexDirection: 'column',
+                        alignItems: 'center', justifyContent: 'center',
+                        cursor: 'pointer',
+                        backdropFilter: 'blur(6px)',
+                    }}
+                >
+                    <div style={{
+                        border: '1px solid rgba(57,255,20,0.5)',
+                        boxShadow: '0 0 40px rgba(57,255,20,0.15)',
+                        maxWidth: '90vw', maxHeight: '85vh',
+                        display: 'flex', flexDirection: 'column', alignItems: 'center',
+                        gap: '12px', padding: '16px',
+                    }}>
+                        {assetPreview.tipo === 'image'
+                            ? <img src={assetPreview.url} alt={assetPreview.nombre}
+                                style={{ maxWidth: '85vw', maxHeight: '78vh', objectFit: 'contain', display: 'block' }} />
+                            : <video src={assetPreview.url} autoPlay loop muted controls
+                                style={{ maxWidth: '85vw', maxHeight: '78vh', display: 'block' }} />
+                        }
+                        <div style={{
+                            color: 'rgba(57,255,20,0.6)', fontFamily: 'monospace',
+                            fontSize: '10px', letterSpacing: '3px', textTransform: 'uppercase',
+                        }}>
+                            ◈ {assetPreview.nombre} · click para cerrar
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            <div style={{ width: '100vw', height: '100vh', background: '#000', overflow: 'hidden', margin: 0, padding: 0, cursor: isPointerLocked ? 'none' : 'default' }}>
+
                 <AudioAnalyzer setAudioLow={setAudioLow} />
-                <NazarCrosshair />
+
+                {/* El ojo/crosshair solo cuando estamos en modo navegación */}
+                {isPointerLocked && <NazarCrosshair />}
+
+                {/* ── CUANDO BLOQUEADO: hint sutil arriba (ESC funciona) ── */}
+                {isPointerLocked && (
+                    <div style={{
+                        position: 'fixed', top: '14px', left: '50%',
+                        transform: 'translateX(-50%)',
+                        zIndex: 9999,
+                        pointerEvents: 'none',
+                        color: 'rgba(57,255,20,0.35)',
+                        fontFamily: 'monospace',
+                        fontSize: '10px',
+                        letterSpacing: '3px',
+                    }}>ESC · CLICK DER = PAUSAR</div>
+                )}
+
+                {/* ── CUANDO LIBRE: botón prominente para retomar navegación ── */}
+                {!isPointerLocked && !terminalOpen && !uploadOpen && (
+                    <button
+                        onClick={() => document.querySelector('canvas')?.requestPointerLock()}
+                        style={{
+                            position: 'fixed', top: '50%', left: '50%',
+                            transform: 'translate(-50%, -50%)',
+                            zIndex: 9999,
+                            pointerEvents: 'all',
+                            background: 'rgba(0,0,0,0.85)',
+                            color: '#39FF14',
+                            border: '1px solid #39FF14',
+                            padding: '14px 32px',
+                            fontFamily: 'monospace',
+                            fontSize: '13px',
+                            letterSpacing: '4px',
+                            cursor: 'pointer',
+                            animation: 'abyssFlicker 1.8s infinite',
+                            boxShadow: '0 0 24px rgba(57,255,20,0.4)',
+                        }}
+                    >
+                        ◈ ABRIR TERCER OJO
+                    </button>
+                )}
 
                 <AbyssHUD particleCount={particleCount} playerCount={Object.keys(otherPlayers).length + 1} />
                 <InfectionTerminal
@@ -292,9 +417,9 @@ export default function OSMentalAbyss() {
                     <CenterRaycaster />
                     <GPUFluidParticles count={particleCount} color="#39FF14" />
 
-                    {/* Cristales dispersos dentro de la nube */}
-                    {crystalPositions.map((pos, i) => (
-                        <ProceduralCrystal key={i} position={pos} />
+                    {/* Pods de blobs pareêdos (rojo+azul) con caos único */}
+                    {blobPods.map((pod, i) => (
+                        <BlobPair key={i} {...pod} />
                     ))}
                     <AbyssGallery />
 
@@ -311,23 +436,21 @@ export default function OSMentalAbyss() {
                         {infecciones.map((inf, i) => (
                             <InfectionText
                                 key={inf.id || i}
+                                index={i}
                                 mensaje={inf.mensaje}
                                 color={inf.color}
-                                position={[Math.sin(i * 2.4) * 12, Math.cos(i * 1.7) * 8, Math.sin(i * 0.9) * 15 - 10]}
+                                font={inf.font}
+                                position={[Math.sin(i * 2.4) * 22, Math.cos(i * 1.7) * 22, Math.sin(i * 0.9) * 22 - 5]}
                             />
-                        ))}
-                    </React.Suspense>
-
-                    {/* Entidades físicas */}
-                    <React.Suspense fallback={null}>
-                        {entities.map((props, i) => (
-                            <DisturbedEntity key={i} {...props} audioLow={audioLow} />
                         ))}
                     </React.Suspense>
 
                     <AggressivePostProcessing />
                 </Canvas>
             </div>
+
+            {/* Navigator de infecciones — DOM, no Canvas */}
+            <InfectionNavigator infecciones={infecciones} />
         </>
     );
 }

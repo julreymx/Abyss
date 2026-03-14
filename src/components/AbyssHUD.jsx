@@ -35,7 +35,8 @@ export default function AbyssHUD({ particleCount, playerCount }) {
                 fontSize: '12px',
                 letterSpacing: '2px'
             }}>
-                [I] INFECTAR · [U] SUBIR · WASD NAVEGAR · CLICK APUNTAR
+                {"[I] INFECTAR · [U] SUBIR · WASD NAVEGAR"} <br/>
+                {"[CLICK IZQ] ABRIR TERCER OJO · [CLICK DER] SOLTAR ABISMO"}
             </div>
         </div>
     );

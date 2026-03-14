@@ -84,6 +84,35 @@ function MagicLinkForm() {
     );
 }
 
+// Fuentes disponibles (solo nombres key)
+const FONT_OPTIONS = [
+    { key: 'mono',        label: 'SISTEMA',    css: "'Courier New', monospace" },
+    { key: 'vt323',       label: 'VT323',      css: "'VT323', monospace" },
+    { key: 'share-tech',  label: 'SHARE TECH', css: "'Share Tech Mono', monospace" },
+    { key: 'orbitron',    label: 'ORBITRON',   css: "'Orbitron', sans-serif" },
+    { key: 'creepster',   label: 'CREEPSTER',  css: "'Creepster', cursive" },
+];
+
+const COLOR_OPTIONS = [
+    '#39FF14', // neon green
+    '#ff003c', // rojo
+    '#00ffff', // cyan
+    '#ff6600', // naranja
+    '#cc00ff', // violeta
+    '#ffffff', // blanco
+];
+
+// Inyectar Google Fonts una sola vez
+let fontsInjected = false;
+function injectFonts() {
+    if (fontsInjected || typeof document === 'undefined') return;
+    fontsInjected = true;
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = 'https://fonts.googleapis.com/css2?family=VT323&family=Share+Tech+Mono&family=Orbitron:wght@700&family=Creepster&display=swap';
+    document.head.appendChild(link);
+}
+
 // -----------------------------------------------------------------------
 // TerminalForm — se muestra cuando hay sesión activa
 // -----------------------------------------------------------------------
@@ -91,8 +120,12 @@ function TerminalForm({ session, onInfection, onClose }) {
     const [mensaje, setMensaje] = useState('');
     const [status, setStatus] = useState('');
     const [infeccionesUsadas, setInfeccionesUsadas] = useState(null);
+    const [selectedColor, setSelectedColor] = useState('#39FF14');
+    const [selectedFont, setSelectedFont] = useState('mono');
     const inputRef = useRef(null);
     const MAX_INFECCIONES = 2;
+
+    useEffect(() => { injectFonts(); }, []);
 
     // Consultar cuántas infecciones ya envió el usuario
     useEffect(() => {
@@ -110,17 +143,18 @@ function TerminalForm({ session, onInfection, onClose }) {
 
     const capacidadAgotada = infeccionesUsadas !== null && infeccionesUsadas >= MAX_INFECCIONES;
     const disponibles = infeccionesUsadas !== null ? Math.max(0, MAX_INFECCIONES - infeccionesUsadas) : null;
+    const fontCss = FONT_OPTIONS.find(f => f.key === selectedFont)?.css || "'Courier New', monospace";
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         if (!mensaje.trim() || capacidadAgotada) return;
         setStatus('TRANSMITIENDO...');
-        const randomColor = ['#39FF14', '#ff003c', '#00ffcc', '#ffffff'][Math.floor(Math.random() * 4)];
         const result = await insertInfection(
             mensaje.trim(),
-            randomColor,
+            selectedColor,
             session.user.id,
             session.user.email,
+            selectedFont,
         );
         if (result && result[0]) {
             onInfection?.(result[0]);
@@ -133,44 +167,99 @@ function TerminalForm({ session, onInfection, onClose }) {
         setTimeout(() => { onClose(); setStatus(''); }, 1200);
     };
 
+    const selectorBtnStyle = (active) => ({
+        background: active ? 'rgba(57,255,20,0.15)' : 'transparent',
+        border: active ? '1px solid #39FF14' : '1px solid rgba(57,255,20,0.25)',
+        color: '#39FF14',
+        padding: '4px 9px',
+        cursor: 'pointer',
+        fontFamily: 'monospace',
+        fontSize: '10px',
+        letterSpacing: '1px',
+        borderRadius: '2px',
+        whiteSpace: 'nowrap',
+    });
+
     return (
         <>
             {capacidadAgotada ? (
                 <p style={{
-                    textAlign: 'center',
-                    color: '#ff003c',
-                    border: '1px solid #ff003c',
-                    padding: '16px',
-                    fontSize: '13px',
-                    letterSpacing: '2px',
+                    textAlign: 'center', color: '#ff003c',
+                    border: '1px solid #ff003c', padding: '16px',
+                    fontSize: '13px', letterSpacing: '2px',
                 }}>
                     ⬛ CAPACIDAD DE INFECCIÓN<br />AGOTADA PARA ESTA CONEXIÓN
                 </p>
             ) : (
                 <form onSubmit={handleSubmit}>
-                    <p style={{ marginBottom: '12px', fontSize: '13px', color: '#8aff9e' }}>
-                        Ingresa tu mensaje para corromper el abismo:
+                    <p style={{ marginBottom: '10px', fontSize: '12px', color: 'rgba(57,255,20,0.6)', letterSpacing: '1px' }}>
+                        COLOR DE INFECCIÓN
                     </p>
+                    {/* Color swatches */}
+                    <div style={{ display: 'flex', gap: '8px', marginBottom: '14px', flexWrap: 'wrap' }}>
+                        {COLOR_OPTIONS.map(c => (
+                            <button key={c} type="button" onClick={() => setSelectedColor(c)} style={{
+                                width: '28px', height: '28px', background: c, border: 'none',
+                                cursor: 'pointer', borderRadius: '2px',
+                                outline: selectedColor === c ? `3px solid ${c}` : '3px solid transparent',
+                                outlineOffset: '2px',
+                                boxShadow: selectedColor === c ? `0 0 12px ${c}` : 'none',
+                                transition: 'box-shadow 0.2s',
+                            }} />
+                        ))}
+                        {/* Custom color input */}
+                        <label title="Color personalizado" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+                            <span style={{ fontSize: '10px', color: 'rgba(57,255,20,0.5)', fontFamily: 'monospace', marginRight: '4px' }}>HEX</span>
+                            <input type="color" value={selectedColor} onChange={e => setSelectedColor(e.target.value)}
+                                style={{ width: '28px', height: '28px', border: 'none', background: 'none', cursor: 'pointer', padding: 0 }} />
+                        </label>
+                    </div>
+
+                    <p style={{ marginBottom: '10px', fontSize: '12px', color: 'rgba(57,255,20,0.6)', letterSpacing: '1px' }}>
+                        TIPOGRAFÍA
+                    </p>
+                    {/* Font selector */}
+                    <div style={{ display: 'flex', gap: '6px', marginBottom: '14px', flexWrap: 'wrap' }}>
+                        {FONT_OPTIONS.map(f => (
+                            <button key={f.key} type="button" onClick={() => setSelectedFont(f.key)}
+                                style={{ ...selectorBtnStyle(selectedFont === f.key), fontFamily: f.css }}>
+                                {f.label}
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* Live preview */}
+                    {mensaje && (
+                        <div style={{
+                            color: selectedColor, fontFamily: fontCss,
+                            fontSize: '16px', letterSpacing: '2px', marginBottom: '10px',
+                            textShadow: `0 0 10px ${selectedColor}`,
+                            minHeight: '24px', padding: '6px 0',
+                            borderBottom: '1px solid rgba(57,255,20,0.15)',
+                        }}>
+                            {mensaje}
+                        </div>
+                    )}
+
                     <input
                         ref={inputRef}
                         type="text"
                         value={mensaje}
                         onChange={e => setMensaje(e.target.value)}
                         placeholder="_"
+                        maxLength={120}
                         style={{
-                            width: '100%',
-                            padding: '10px',
-                            background: '#000',
-                            border: '1px solid #39FF14',
-                            color: '#39FF14',
-                            fontFamily: 'monospace',
-                            fontSize: '18px',
-                            marginBottom: '12px',
-                            boxSizing: 'border-box',
+                            width: '100%', padding: '10px',
+                            background: '#000', border: `1px solid ${selectedColor}`,
+                            color: selectedColor, fontFamily: fontCss,
+                            fontSize: '16px', marginBottom: '8px',
+                            boxSizing: 'border-box', letterSpacing: '1px',
+                            boxShadow: `0 0 8px ${selectedColor}33`,
+                            transition: 'border-color 0.2s, color 0.2s',
                         }}
                     />
                     {disponibles !== null && (
-                        <p style={{ fontSize: '11px', color: '#8aff9e', marginBottom: '16px', letterSpacing: '1px' }}>
+                        <p style={{ fontSize: '11px', color: 'rgba(57,255,20,0.5)', marginBottom: '14px', letterSpacing: '1px' }}>
                             INFECCIONES DISPONIBLES: {disponibles} / {MAX_INFECCIONES}
                         </p>
                     )}
@@ -179,29 +268,20 @@ function TerminalForm({ session, onInfection, onClose }) {
                             type="submit"
                             disabled={!mensaje || status === 'TRANSMITIENDO...'}
                             style={{
-                                background: status === 'TRANSMITIENDO...' ? '#555' : '#39FF14',
-                                color: '#000',
-                                border: 'none',
+                                background: status === 'TRANSMITIENDO...' ? '#555' : selectedColor,
+                                color: '#000', border: 'none',
                                 padding: '10px 20px',
                                 cursor: mensaje && status !== 'TRANSMITIENDO...' ? 'pointer' : 'not-allowed',
-                                fontWeight: 'bold',
-                                fontFamily: 'monospace',
+                                fontWeight: 'bold', fontFamily: 'monospace', letterSpacing: '2px',
                             }}
                         >
                             {status === 'TRANSMITIENDO...' ? '...' : 'INFECTAR'}
                         </button>
-                        <button
-                            type="button"
-                            onClick={onClose}
-                            style={{
-                                background: 'transparent',
-                                color: '#39FF14',
-                                border: '1px solid #39FF14',
-                                padding: '10px 20px',
-                                cursor: 'pointer',
-                                fontFamily: 'monospace',
-                            }}
-                        >
+                        <button type="button" onClick={onClose} style={{
+                            background: 'transparent', color: '#39FF14',
+                            border: '1px solid #39FF14', padding: '10px 20px',
+                            cursor: 'pointer', fontFamily: 'monospace',
+                        }}>
                             CANCELAR
                         </button>
                     </div>

@@ -1,56 +1,106 @@
-import React, { useRef } from 'react'
+import React, { useRef, useMemo } from 'react'
 import { useFrame } from '@react-three/fiber'
+import * as THREE from 'three'
 
-export default function ProceduralCrystal({ position = [0, 0, 0] }) {
+// ─── Blob individual con personalidad única ────────────────────────────────
+function BlobCrystal({ position, color, size, deformFreq, deformAmp, pulseSpeed, pulseAmp, rotSpeedX, rotSpeedY }) {
     const meshRef = useRef()
-    const materialRef = useRef()
+    const matRef = useRef()
+    const cKey = useMemo(() => `blob-${color}-${deformFreq}`, [color, deformFreq])
 
-    useFrame((state) => {
-        if (materialRef.current?.userData?.shader) {
-            materialRef.current.userData.shader.uniforms.uTime.value = state.clock.elapsedTime
-        }
-        if (meshRef.current) {
-            meshRef.current.rotation.x = state.clock.elapsedTime * 0.2
-            meshRef.current.rotation.y = state.clock.elapsedTime * 0.3
-        }
-    })
+    const onBeforeCompile = useMemo(() => (shader) => {
+        shader.uniforms.uTime     = { value: 0 }
+        shader.uniforms.uDeformF  = { value: deformFreq }
+        shader.uniforms.uDeformA  = { value: deformAmp }
+        shader.uniforms.uBlobColor = { value: new THREE.Color(color) }
 
-    const onBeforeCompile = (shader) => {
-        shader.uniforms.uTime = { value: 0 }
         shader.vertexShader = `
-      uniform float uTime;
-      varying vec3 vCustomPos;
-    ` + shader.vertexShader
+            uniform float uTime; uniform float uDeformF; uniform float uDeformA;
+            varying vec3 vPos;
+        ` + shader.vertexShader
         shader.vertexShader = shader.vertexShader.replace(
             '#include <begin_vertex>',
             `#include <begin_vertex>
-      float d = sin(position.x*2.0+uTime)*cos(position.y*2.0+uTime)*sin(position.z*2.0+uTime);
-      transformed += normal * d * 0.3;
-      vCustomPos = transformed;`
+            float d = sin(position.x*uDeformF+uTime*1.1)*cos(position.y*uDeformF+uTime*0.8)*sin(position.z*uDeformF+uTime*1.5);
+            transformed += normal * d * uDeformA;
+            vPos = transformed;`
         )
+
         shader.fragmentShader = `
-      uniform float uTime;
-      varying vec3 vCustomPos;
-    ` + shader.fragmentShader
+            uniform float uTime; uniform vec3 uBlobColor;
+            varying vec3 vPos;
+        ` + shader.fragmentShader
         shader.fragmentShader = shader.fragmentShader.replace(
             '#include <dithering_fragment>',
             `#include <dithering_fragment>
-      float mx = (sin(vCustomPos.y*2.0+uTime)+1.0)*0.5;
-      vec3 cA = vec3(1.0,0.0,0.8), cB = vec3(0.2,0.0,1.0);
-      gl_FragColor.rgb = mix(gl_FragColor.rgb, mix(cA,cB,mx), 0.6);`
+            float mx = (sin(vPos.y * 2.0 + uTime * 0.6) + 1.0) * 0.5;
+            // Sobrescribir completamente con el color sólido del blob
+            gl_FragColor.rgb = mix(uBlobColor, uBlobColor * 1.8, mx * 0.5);`
         )
-        materialRef.current.userData.shader = shader
-    }
+        matRef.current.userData.shader = shader
+    }, [color, deformFreq, deformAmp])
+
+    useFrame((state) => {
+        if (matRef.current?.userData?.shader) {
+            matRef.current.userData.shader.uniforms.uTime.value = state.clock.elapsedTime
+        }
+        if (meshRef.current) {
+            meshRef.current.rotation.x = state.clock.elapsedTime * rotSpeedX
+            meshRef.current.rotation.y = state.clock.elapsedTime * rotSpeedY
+            const pulse = 1 + Math.sin(state.clock.elapsedTime * pulseSpeed) * pulseAmp
+            meshRef.current.scale.setScalar(pulse)
+        }
+    })
 
     return (
         <mesh ref={meshRef} position={position}>
-            <icosahedronGeometry args={[1, 4]} />
-            <meshPhysicalMaterial
-                ref={materialRef}
-                roughness={0.1} metalness={0.9} transmission={0.4} thickness={0.5} transparent
+            <icosahedronGeometry args={[size, 3]} />
+            <meshStandardMaterial
+                ref={matRef}
+                roughness={0.3}
+                metalness={0.1}
+                color={color}
+                emissive={color}
+                emissiveIntensity={0.6}
                 onBeforeCompile={onBeforeCompile}
-                customProgramCacheKey={() => 'procedural-crystal'}
+                customProgramCacheKey={() => cKey}
             />
         </mesh>
+    )
+}
+
+// ─── Par de blobs que orbitan un centro comm ████───────────────────────────
+export function BlobPair({ center, orbitRadius, orbitPhase, floatSpeed, floatAmp, redParams, blueParams }) {
+    const groupRef = useRef()
+
+    useFrame((state) => {
+        if (!groupRef.current) return
+        const t = state.clock.elapsedTime
+        groupRef.current.position.set(
+            center[0] + Math.cos(t * floatSpeed * 0.4 + orbitPhase) * floatAmp * 1.1,
+            center[1] + Math.sin(t * floatSpeed * 0.6 + orbitPhase * 1.3) * floatAmp,
+            center[2] + Math.sin(t * floatSpeed * 0.3 + orbitPhase * 0.7) * floatAmp * 0.5
+        )
+    })
+
+    const redOff  = [ Math.cos(orbitPhase) * orbitRadius, Math.sin(orbitPhase * 0.7) * orbitRadius * 0.4, Math.sin(orbitPhase) * orbitRadius * 0.3 ]
+    const blueOff = [-redOff[0], -redOff[1] * 0.9, -redOff[2] * 0.8]
+
+    return (
+        <group ref={groupRef}>
+            <BlobCrystal position={redOff}  color="#cc1a1a" {...redParams}  />
+            <BlobCrystal position={blueOff} color="#1a44cc" {...blueParams} />
+        </group>
+    )
+}
+
+export default function ProceduralCrystal({ position = [0, 0, 0] }) {
+    return (
+        <BlobPair
+            center={position} orbitRadius={1.8} orbitPhase={position[0] * 0.7 + position[1] * 0.3}
+            floatSpeed={0.4}  floatAmp={0.8}
+            redParams ={{ size: 0.50, deformFreq: 2.1, deformAmp: 0.28, pulseSpeed: 1.8, pulseAmp: 0.12, rotSpeedX: 0.18, rotSpeedY: 0.27 }}
+            blueParams={{ size: 0.38, deformFreq: 2.8, deformAmp: 0.20, pulseSpeed: 2.4, pulseAmp: 0.09, rotSpeedX: 0.25, rotSpeedY: 0.15 }}
+        />
     )
 }

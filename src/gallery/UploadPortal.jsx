@@ -1,4 +1,4 @@
-﻿
+
 import React, { useState } from 'react';
 import { supabase } from '../services/supabase';
 
@@ -26,14 +26,24 @@ export default function UploadPortal({ isOpen, onClose }) {
                 .from('archivos-abyss')
                 .getPublicUrl(fileName);
 
+            // Shell distribution: random point in sphere shell r=[12,55]
+            // avoids clustering near the origin
+            const theta = Math.random() * Math.PI * 2;
+            const phi   = Math.acos(Math.random() * 2 - 1);
+            const r     = 12 + Math.random() * 43; // 12..55
+            const px    = r * Math.sin(phi) * Math.cos(theta);
+            const py    = r * Math.sin(phi) * Math.sin(theta) * 0.75; // slightly flatten Y
+            const pz    = r * Math.cos(phi) * 0.6 - 10;               // push slightly back
+
             const { error: dbError } = await supabase.from('archivos').insert([{
                 nombre: file.name,
                 tipo: file.type || 'application/octet-stream',
                 url: publicUrl,
-                posicion_x: (Math.random() - 0.5) * 40,
-                posicion_y: (Math.random() - 0.5) * 40,
-                posicion_z: (Math.random() - 0.5) * 20 - 15,
+                posicion_x: px,
+                posicion_y: py,
+                posicion_z: pz,
             }]);
+
 
             if (dbError) throw dbError;
 

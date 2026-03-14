@@ -111,7 +111,7 @@ export default function GPUFluidParticles({ count = 5000, color = '#39FF14' }) {
       const theta = random() * Math.PI * 2;
       const phi = Math.acos((random() * 2) - 1);
       // Usar distribución cúbica para nube más volumétrica y extendida
-      const r = Math.cbrt(random()) * 18;
+      const r = Math.cbrt(random()) * 35;
       pos[i * 3] = r * Math.sin(phi) * Math.cos(theta);
       pos[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
       pos[i * 3 + 2] = r * Math.cos(phi);
@@ -133,7 +133,7 @@ export default function GPUFluidParticles({ count = 5000, color = '#39FF14' }) {
   });
 
   return (
-    <instancedMesh ref={meshRef} args={[null, null, MAX_PARTICLES]}>
+    <instancedMesh ref={meshRef} args={[null, null, MAX_PARTICLES]} frustumCulled={false}>
       <planeGeometry args={[1, 1]}>
         <instancedBufferAttribute attach="attributes-instancePosition" args={[positions, 3]} />
         <instancedBufferAttribute attach="attributes-instanceScale" args={[scales, 1]} />

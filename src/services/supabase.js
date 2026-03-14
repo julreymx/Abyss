@@ -1,65 +1,92 @@
 import { createClient } from '@supabase/supabase-js'
 
-// You must add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to your .env file
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://your-project.supabase.co'
+const supabaseUrl     = import.meta.env.VITE_SUPABASE_URL    || 'https://your-project.supabase.co'
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'your-anon-key'
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
+// Entorno activo: 'dev' en local, 'production' en Vercel
+const APP_ENV = import.meta.env.VITE_APP_ENV || 'production'
+
 /**
- * Inserts a new cryptic message (infection) from a visitor
- * @param {string} mensaje - The cryptic text
- * @param {string} color - Hex color code (e.g. '#ff0000')
- * @param {string} userId - Supabase auth user UUID
- * @param {string} userEmail - Supabase auth user email
+ * Inserts a new cryptic message (infection) from a visitor.
+ * Writes the current environment so dev/prod data stays separated.
  */
-export async function insertInfection(mensaje, color = '#ffffff', userId = null, userEmail = null) {
+export async function insertInfection(mensaje, color = '#ffffff', userId = null, userEmail = null, font = 'mono') {
   try {
     const { data, error } = await supabase
       .from('infecciones')
-      .insert([{ mensaje, color, user_id: userId, user_email: userEmail }])
+      .insert([{ mensaje, color, font, environment: APP_ENV, user_id: userId, user_email: userEmail }])
       .select()
 
-    if (error) throw error
+    if (error) {
+      // Fallback si font o environment aún no existen como columnas
+      if (error.code === '42703') {
+        console.warn('Columna desconocida → reintentando sin font/environment...');
+        const fallback = await supabase
+          .from('infecciones')
+          .insert([{ mensaje, color, user_id: userId, user_email: userEmail }])
+          .select()
+        if (fallback.error) throw fallback.error
+        return fallback.data
+      }
+      throw error
+    }
     return data
-  } catch (error) {
-    console.error('Error inserting infection:', error)
+  } catch (err) {
+    console.error('Error inserting infection:', err)
     return null
   }
 }
 
 /**
- * Subscribes to new infections in real-time
- * @param {function} callback - Function to handle the payload when a new infection arrives
+ * Subscribes to new infections in real-time — solo del entorno actual.
  */
 export function subscribeToInfections(callback) {
+  const ENV = APP_ENV;
   return supabase
-    .channel('infecciones-realtime')
-    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'infecciones' },
-      (payload) => callback(payload.new))
+    .channel(`infecciones-realtime-${ENV}`)
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'infecciones' },
+      (payload) => {
+        // Filtrar en cliente: solo infecciones de este entorno
+        if (!payload.new.environment || payload.new.environment === ENV) {
+          callback(payload.new);
+        }
+      }
+    )
     .subscribe();
 }
 
 /**
- * Retrieves the latest infections to populate the canvas initially
- * @param {number} limit - How many to retrieve
+ * Retrieves the latest infections for the current environment.
  */
-export async function getRecentInfections(limit = 50) {
+export async function getRecentInfections(limit = 150) {
   try {
     const { data, error } = await supabase
       .from('infecciones')
       .select('*')
+      .eq('environment', APP_ENV)
       .order('created_at', { ascending: false })
       .limit(limit)
 
     if (error) throw error
     return data
-  } catch (error) {
-    console.error('Error fetching infections:', error)
+  } catch (err) {
+    console.error('Error fetching infections:', err)
     return []
   }
 }
+
+/**
+ * Limpia solo las infecciones del entorno actual.
+ */
 export async function limpiarAbismo() {
-  const { error } = await supabase.from('infecciones').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+  const { error } = await supabase
+    .from('infecciones')
+    .delete()
+    .eq('environment', APP_ENV)
+    .neq('id', '00000000-0000-0000-0000-000000000000');
   return !error;
 }
