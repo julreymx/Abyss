@@ -38,7 +38,7 @@ function dispatchFlyTo(position) {
 }
 
 // ─── Infection row ────────────────────────────────────────────────────────────
-function InfRow({ inf, index, compact, onClick }) {
+function InfRow({ inf, index, compact, onClick, isOwner, onDelete }) {
     const color  = inf.color  || '#39FF14';
     const font   = FONT_MAP[inf.font] || FONT_MAP.mono;
     const ts     = inf.created_at
@@ -47,12 +47,10 @@ function InfRow({ inf, index, compact, onClick }) {
 
     return (
         <div
-            onClick={() => onClick(index)}
             title="→ Volar a esta infección"
             style={{
                 display: 'flex', alignItems: 'center', gap: '8px',
                 padding: compact ? '5px 8px' : '7px 10px',
-                cursor: 'pointer',
                 borderLeft: `2px solid ${color}`,
                 marginBottom: '4px',
                 background: 'rgba(0,0,0,0.3)',
@@ -61,23 +59,28 @@ function InfRow({ inf, index, compact, onClick }) {
             onMouseEnter={e => e.currentTarget.style.background = 'rgba(57,255,20,0.06)'}
             onMouseLeave={e => e.currentTarget.style.background = 'rgba(0,0,0,0.3)'}
         >
-            {/* color dot */}
-            <span style={{
-                width: '6px', height: '6px', borderRadius: '50%',
-                background: color,
-                boxShadow: `0 0 6px ${color}`,
-                flexShrink: 0,
-            }} />
-            {/* message */}
-            <span style={{
-                color, fontFamily: font,
-                fontSize: compact ? '11px' : '12px',
-                letterSpacing: '1px',
-                textShadow: `0 0 6px ${color}88`,
-                overflow: 'hidden', textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-                flex: 1,
-            }}>
+            {/* color dot — click to fly */}
+            <span
+                onClick={() => onClick(index)}
+                style={{
+                    width: '6px', height: '6px', borderRadius: '50%',
+                    background: color, boxShadow: `0 0 6px ${color}`,
+                    flexShrink: 0, cursor: 'pointer',
+                }}
+            />
+            {/* message — click to fly */}
+            <span
+                onClick={() => onClick(index)}
+                style={{
+                    color, fontFamily: font,
+                    fontSize: compact ? '11px' : '12px',
+                    letterSpacing: '1px',
+                    textShadow: `0 0 6px ${color}88`,
+                    overflow: 'hidden', textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    flex: 1, cursor: 'pointer',
+                }}
+            >
                 {inf.mensaje}
             </span>
             {!compact && ts && (
@@ -85,12 +88,32 @@ function InfRow({ inf, index, compact, onClick }) {
                     {ts}
                 </span>
             )}
+            {/* God mode delete */}
+            {isOwner && (
+                <button
+                    onClick={e => { e.stopPropagation(); onDelete?.(inf.id); }}
+                    title="Borrar infección"
+                    style={{
+                        background: 'transparent',
+                        border: '1px solid rgba(255,0,60,0.4)',
+                        color: '#ff003c', fontSize: '10px',
+                        lineHeight: 1, padding: '2px 5px',
+                        cursor: 'pointer', fontFamily: 'monospace',
+                        flexShrink: 0, borderRadius: '2px',
+                        transition: 'background 0.15s',
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,0,60,0.15)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                >
+                    ✕
+                </button>
+            )}
         </div>
     );
 }
 
 // ─── InfectionNavigator ───────────────────────────────────────────────────────
-export default function InfectionNavigator({ infecciones = [] }) {
+export default function InfectionNavigator({ infecciones = [], isOwner = false, onDelete }) {
     const [expanded, setExpanded] = useState(false);
     const [flyingTo, setFlyingTo] = useState(null);
 
@@ -162,7 +185,8 @@ export default function InfectionNavigator({ infecciones = [] }) {
                     </div>
                     {infecciones.map((inf, i) => (
                         <InfRow key={inf.id || i} inf={inf} index={i}
-                            compact={false} onClick={handleRowClick} />
+                            compact={false} onClick={handleRowClick}
+                            isOwner={isOwner} onDelete={onDelete} />
                     ))}
                 </div>
             )}
@@ -198,7 +222,8 @@ export default function InfectionNavigator({ infecciones = [] }) {
                 {/* Last 3 rows */}
                 {recent3.map((inf, i) => (
                     <InfRow key={inf.id || i} inf={inf} index={i}
-                        compact={true} onClick={handleRowClick} />
+                            compact={true} onClick={handleRowClick}
+                            isOwner={isOwner} onDelete={onDelete} />
                 ))}
 
                 {/* Toggle button */}

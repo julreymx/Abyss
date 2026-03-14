@@ -15,7 +15,7 @@ import InfectionTerminal from './components/InfectionTerminal';
 import InfectionNavigator from './components/InfectionNavigator';
 import AbyssNavigator from './controls/AbyssNavigator';
 import CenterRaycaster from './controls/CenterRaycaster';
-import { getRecentInfections, subscribeToInfections } from './services/supabase';
+import { getRecentInfections, subscribeToInfections, deleteInfection } from './services/supabase';
 import NazarCrosshair from './components/NazarCrosshair';
 
 // Font key → CSS (same map as InfectionTerminal/InfectionNavigator)
@@ -471,7 +471,14 @@ export default function OSMentalAbyss() {
             </div>
 
             {/* Navigator de infecciones — DOM, no Canvas */}
-            <InfectionNavigator infecciones={infecciones} />
+            <InfectionNavigator
+                infecciones={infecciones}
+                isOwner={isOwner}
+                onDelete={async (id) => {
+                    const ok = await deleteInfection(id);
+                    if (ok) setInfecciones(prev => prev.filter(inf => inf.id !== id));
+                }}
+            />
         </>
     );
 }

@@ -93,3 +93,20 @@ export async function limpiarAbismo() {
     .neq('id', '00000000-0000-0000-0000-000000000000');
   return !error;
 }
+
+/**
+ * Deletes a single infection by id (god mode only).
+ */
+export async function deleteInfection(id) {
+  try {
+    const { error } = await supabase
+      .from('infecciones')
+      .delete()
+      .eq('id', id);
+    if (error) throw error;
+    return true;
+  } catch (err) {
+    console.error('Error deleting infection:', err);
+    return false;
+  }
+}
