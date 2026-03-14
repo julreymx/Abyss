@@ -67,16 +67,41 @@ function useCenterHover(meshRef, setHovered) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+class BaseErrorBoundary extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = { hasError: false };
+    }
+    static getDerivedStateFromError(error) {
+        return { hasError: true };
+    }
+    componentDidCatch(error, errorInfo) {
+        console.warn('⚠️ Media falló al cargar, corrompiendo en el abismo:', error);
+    }
+    render() {
+        if (this.state.hasError) {
+            // Render a generic node indicating a corrupted file
+            return <GenericNode position={this.props.position} nombre="[CORRUPTO]" tipo="unknown" />;
+        }
+        return this.props.children;
+    }
+}
+
 export default function FileNode({ file }) {
     const { tipo, url, nombre, posicion_x, posicion_y, posicion_z } = file;
     const position = [posicion_x, posicion_y, posicion_z];
     const isImage = tipo?.startsWith('image/');
     const isVideo = tipo?.startsWith('video/');
     const isAudio = tipo?.startsWith('audio/');
-    if (isImage) return <ImageNode url={url} position={position} nombre={nombre} />;
-    if (isVideo) return <VideoNode url={url} position={position} nombre={nombre} />;
-    if (isAudio) return <AudioNode position={position} nombre={nombre} />;
-    return <GenericNode position={position} nombre={nombre} tipo={tipo} />;
+    
+    return (
+        <BaseErrorBoundary position={position}>
+            {isImage && <ImageNode url={url} position={position} nombre={nombre} />}
+            {isVideo && <VideoNode url={url} position={position} nombre={nombre} />}
+            {isAudio && <AudioNode position={position} nombre={nombre} />}
+            {!isImage && !isVideo && !isAudio && <GenericNode position={position} nombre={nombre} tipo={tipo} />}
+        </BaseErrorBoundary>
+    );
 }
 
 // ─── IMAGE NODE ───────────────────────────────────────────────────────────────

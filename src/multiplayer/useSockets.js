@@ -7,8 +7,8 @@ export const useMultiplayer = () => {
     const socketRef = useRef(null);
 
     useEffect(() => {
-        // En producción (Vercel), se conectará a la Mente Maestra en Render.
-        const socketPath = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3000';
+        // En producción (Vercel), se conectará siempre a la instancia de Render, independientemente de Vercel ENV.
+        const socketPath = import.meta.env.PROD ? 'https://abyss-82qb.onrender.com' : (import.meta.env.VITE_SOCKET_URL || 'http://localhost:3000');
         const newSocket = io(socketPath);
         socketRef.current = newSocket;
 
