@@ -1,55 +1,27 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { supabase, insertInfection } from '../services/supabase';
-import { useSession } from '../auth/AuthContext';
+import { insertInfection } from '../services/supabase';
 
-// -----------------------------------------------------------------------
-// AnonGate — autenticación silenciosa sin email
-// -----------------------------------------------------------------------
-function AnonGate() {
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState('');
+// ── Helpers ───────────────────────────────────────────────────────────────────
+const MAX_INFECCIONES = 2;
+const LS_KEY = 'abyss_visitor';
 
-    const handleEnter = async () => {
-        setLoading(true);
-        setError('');
-        const { error: authError } = await supabase.auth.signInAnonymously();
-        if (authError) {
-            setError('✗ ERROR — ' + authError.message);
-            setLoading(false);
-        }
-        // Si exitoso, AuthContext detectará la nueva sesión automáticamente
-    };
-
-    return (
-        <div style={{ textAlign: 'center', padding: '10px 0' }}>
-            <p style={{ marginBottom: '24px', color: '#8aff9e', fontSize: '13px', letterSpacing: '1px', lineHeight: '1.6' }}>
-                Para infectar el abismo<br />
-                <span style={{ color: 'rgba(57,255,20,0.5)', fontSize: '11px' }}>sin cuenta, sin rastro</span>
-            </p>
-            {error && <p style={{ color: '#ff003c', marginBottom: '12px', fontSize: '12px' }}>{error}</p>}
-            <button
-                onClick={handleEnter}
-                disabled={loading}
-                style={{
-                    background: loading ? '#555' : '#39FF14',
-                    color: '#000',
-                    border: 'none',
-                    padding: '12px 28px',
-                    cursor: loading ? 'not-allowed' : 'pointer',
-                    fontWeight: 'bold',
-                    fontFamily: 'monospace',
-                    fontSize: '13px',
-                    letterSpacing: '3px',
-                    width: '100%',
-                }}
-            >
-                {loading ? 'CONECTANDO...' : 'INFECTAR →'}
-            </button>
-        </div>
-    );
+function getVisitor() {
+    try {
+        const raw = localStorage.getItem(LS_KEY);
+        if (raw) return JSON.parse(raw);
+    } catch (_) { /* noop */ }
+    const visitor = { id: crypto.randomUUID(), count: 0 };
+    localStorage.setItem(LS_KEY, JSON.stringify(visitor));
+    return visitor;
 }
 
-// Fuentes disponibles (solo nombres key)
+function incrementVisitor(visitor) {
+    const updated = { ...visitor, count: visitor.count + 1 };
+    localStorage.setItem(LS_KEY, JSON.stringify(updated));
+    return updated;
+}
+
+// ── Fuentes y colores ─────────────────────────────────────────────────────────
 const FONT_OPTIONS = [
     { key: 'mono',        label: 'SISTEMA',    css: "'Courier New', monospace" },
     { key: 'vt323',       label: 'VT323',      css: "'VT323', monospace" },
@@ -59,15 +31,9 @@ const FONT_OPTIONS = [
 ];
 
 const COLOR_OPTIONS = [
-    '#39FF14', // neon green
-    '#ff003c', // rojo
-    '#00ffff', // cyan
-    '#ff6600', // naranja
-    '#cc00ff', // violeta
-    '#ffffff', // blanco
+    '#39FF14', '#ff003c', '#00ffff', '#ff6600', '#cc00ff', '#ffffff',
 ];
 
-// Inyectar Google Fonts una sola vez
 let fontsInjected = false;
 function injectFonts() {
     if (fontsInjected || typeof document === 'undefined') return;
@@ -78,53 +44,48 @@ function injectFonts() {
     document.head.appendChild(link);
 }
 
-// -----------------------------------------------------------------------
-// TerminalForm — se muestra cuando hay sesión activa
-// -----------------------------------------------------------------------
-function TerminalForm({ session, onInfection, onClose }) {
+// ── InfectionTerminal ─────────────────────────────────────────────────────────
+export default function InfectionTerminal({ isOpen, onClose, onInfection }) {
+    const [visitor, setVisitor] = useState(null);
     const [mensaje, setMensaje] = useState('');
+    const [email, setEmail] = useState('');
     const [status, setStatus] = useState('');
-    const [infeccionesUsadas, setInfeccionesUsadas] = useState(null);
     const [selectedColor, setSelectedColor] = useState('#39FF14');
     const [selectedFont, setSelectedFont] = useState('mono');
     const inputRef = useRef(null);
-    const MAX_INFECCIONES = 2;
-
-    useEffect(() => { injectFonts(); }, []);
-
-    // Consultar cuántas infecciones ya envió el usuario
-    useEffect(() => {
-        if (!session?.user?.id) return;
-        supabase
-            .from('infecciones')
-            .select('id', { count: 'exact', head: true })
-            .eq('user_id', session.user.id)
-            .then(({ count }) => setInfeccionesUsadas(count ?? 0));
-    }, [session]);
 
     useEffect(() => {
-        setTimeout(() => { inputRef.current?.focus(); }, 50);
-    }, []);
+        if (isOpen) {
+            injectFonts();
+            setVisitor(getVisitor());
+            setTimeout(() => inputRef.current?.focus(), 50);
+        }
+    }, [isOpen]);
 
-    const capacidadAgotada = infeccionesUsadas !== null && infeccionesUsadas >= MAX_INFECCIONES;
-    const disponibles = infeccionesUsadas !== null ? Math.max(0, MAX_INFECCIONES - infeccionesUsadas) : null;
+    if (!isOpen) return null;
+
+    const capacidadAgotada = visitor !== null && visitor.count >= MAX_INFECCIONES;
+    const disponibles = visitor !== null ? Math.max(0, MAX_INFECCIONES - visitor.count) : null;
     const fontCss = FONT_OPTIONS.find(f => f.key === selectedFont)?.css || "'Courier New', monospace";
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         if (!mensaje.trim() || capacidadAgotada) return;
         setStatus('TRANSMITIENDO...');
+
         const result = await insertInfection(
             mensaje.trim(),
             selectedColor,
-            session.user.id,
-            session.user.email,
+            visitor?.id || null,
+            email.trim() || null,
             selectedFont,
         );
+
         if (result && result[0]) {
+            const updated = incrementVisitor(visitor);
+            setVisitor(updated);
             onInfection?.(result[0]);
             setStatus('✓ INFECCIÓN ACEPTADA');
-            setInfeccionesUsadas(prev => (prev ?? 0) + 1);
         } else {
             setStatus('✗ ERROR — REINTENTA');
         }
@@ -146,144 +107,6 @@ function TerminalForm({ session, onInfection, onClose }) {
     });
 
     return (
-        <>
-            {capacidadAgotada ? (
-                <p style={{
-                    textAlign: 'center', color: '#ff003c',
-                    border: '1px solid #ff003c', padding: '16px',
-                    fontSize: '13px', letterSpacing: '2px',
-                }}>
-                    ⬛ CAPACIDAD DE INFECCIÓN<br />AGOTADA PARA ESTA CONEXIÓN
-                </p>
-            ) : (
-                <form onSubmit={handleSubmit}>
-                    <p style={{ marginBottom: '10px', fontSize: '12px', color: 'rgba(57,255,20,0.6)', letterSpacing: '1px' }}>
-                        COLOR DE INFECCIÓN
-                    </p>
-                    {/* Color swatches */}
-                    <div style={{ display: 'flex', gap: '8px', marginBottom: '14px', flexWrap: 'wrap' }}>
-                        {COLOR_OPTIONS.map(c => (
-                            <button key={c} type="button" onClick={() => setSelectedColor(c)} style={{
-                                width: '28px', height: '28px', background: c, border: 'none',
-                                cursor: 'pointer', borderRadius: '2px',
-                                outline: selectedColor === c ? `3px solid ${c}` : '3px solid transparent',
-                                outlineOffset: '2px',
-                                boxShadow: selectedColor === c ? `0 0 12px ${c}` : 'none',
-                                transition: 'box-shadow 0.2s',
-                            }} />
-                        ))}
-                        {/* Custom color input */}
-                        <label title="Color personalizado" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
-                            <span style={{ fontSize: '10px', color: 'rgba(57,255,20,0.5)', fontFamily: 'monospace', marginRight: '4px' }}>HEX</span>
-                            <input type="color" value={selectedColor} onChange={e => setSelectedColor(e.target.value)}
-                                style={{ width: '28px', height: '28px', border: 'none', background: 'none', cursor: 'pointer', padding: 0 }} />
-                        </label>
-                    </div>
-
-                    <p style={{ marginBottom: '10px', fontSize: '12px', color: 'rgba(57,255,20,0.6)', letterSpacing: '1px' }}>
-                        TIPOGRAFÍA
-                    </p>
-                    {/* Font selector */}
-                    <div style={{ display: 'flex', gap: '6px', marginBottom: '14px', flexWrap: 'wrap' }}>
-                        {FONT_OPTIONS.map(f => (
-                            <button key={f.key} type="button" onClick={() => setSelectedFont(f.key)}
-                                style={{ ...selectorBtnStyle(selectedFont === f.key), fontFamily: f.css }}>
-                                {f.label}
-                            </button>
-                        ))}
-                    </div>
-
-                    {/* Live preview */}
-                    {mensaje && (
-                        <div style={{
-                            color: selectedColor, fontFamily: fontCss,
-                            fontSize: '16px', letterSpacing: '2px', marginBottom: '10px',
-                            textShadow: `0 0 10px ${selectedColor}`,
-                            minHeight: '24px', padding: '6px 0',
-                            borderBottom: '1px solid rgba(57,255,20,0.15)',
-                        }}>
-                            {mensaje}
-                        </div>
-                    )}
-
-                    <input
-                        ref={inputRef}
-                        type="text"
-                        value={mensaje}
-                        onChange={e => setMensaje(e.target.value)}
-                        placeholder="_"
-                        maxLength={120}
-                        style={{
-                            width: '100%', padding: '10px',
-                            background: '#000', border: `1px solid ${selectedColor}`,
-                            color: selectedColor, fontFamily: fontCss,
-                            fontSize: '16px', marginBottom: '8px',
-                            boxSizing: 'border-box', letterSpacing: '1px',
-                            boxShadow: `0 0 8px ${selectedColor}33`,
-                            transition: 'border-color 0.2s, color 0.2s',
-                        }}
-                    />
-                    {disponibles !== null && (
-                        <p style={{ fontSize: '11px', color: 'rgba(57,255,20,0.5)', marginBottom: '14px', letterSpacing: '1px' }}>
-                            INFECCIONES DISPONIBLES: {disponibles} / {MAX_INFECCIONES}
-                        </p>
-                    )}
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <button
-                            type="submit"
-                            disabled={!mensaje || status === 'TRANSMITIENDO...'}
-                            style={{
-                                background: status === 'TRANSMITIENDO...' ? '#555' : selectedColor,
-                                color: '#000', border: 'none',
-                                padding: '10px 20px',
-                                cursor: mensaje && status !== 'TRANSMITIENDO...' ? 'pointer' : 'not-allowed',
-                                fontWeight: 'bold', fontFamily: 'monospace', letterSpacing: '2px',
-                            }}
-                        >
-                            {status === 'TRANSMITIENDO...' ? '...' : 'INFECTAR'}
-                        </button>
-                        <button type="button" onClick={onClose} style={{
-                            background: 'transparent', color: '#39FF14',
-                            border: '1px solid #39FF14', padding: '10px 20px',
-                            cursor: 'pointer', fontFamily: 'monospace',
-                        }}>
-                            CANCELAR
-                        </button>
-                    </div>
-                </form>
-            )}
-            {status && (
-                <p style={{ marginTop: '20px', textAlign: 'center', textTransform: 'uppercase', fontSize: '13px' }}>
-                    {status}
-                </p>
-            )}
-        </>
-    );
-}
-
-// -----------------------------------------------------------------------
-// InfectionTerminal — orquestador del modal (auth gate + terminal)
-// -----------------------------------------------------------------------
-export default function InfectionTerminal({ isOpen, onClose, onInfection }) {
-    const session = useSession();
-
-    if (!isOpen) return null;
-
-    // Determinar qué mostrar dentro del modal
-    let content;
-    if (session === undefined) {
-        content = (
-            <p style={{ textAlign: 'center', color: '#8aff9e', fontSize: '13px', letterSpacing: '2px' }}>
-                INICIALIZANDO...
-            </p>
-        );
-    } else if (!session) {
-        content = <AnonGate />;
-    } else {
-        content = <TerminalForm session={session} onInfection={onInfection} onClose={onClose} />;
-    }
-
-    return (
         <div style={{
             position: 'fixed',
             top: 0, left: 0, width: '100vw', height: '100vh',
@@ -301,16 +124,129 @@ export default function InfectionTerminal({ isOpen, onClose, onInfection }) {
                 background: '#0a2912',
                 boxShadow: '0 0 15px #39FF14',
             }}>
+                {/* Header */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid #39FF14', paddingBottom: '10px' }}>
                     <h2 style={{ margin: 0 }}>[ INFECTION_TERMINAL ]</h2>
-                    <button
-                        onClick={onClose}
-                        style={{ background: 'transparent', color: '#39FF14', border: 'none', cursor: 'pointer', fontFamily: 'monospace', fontSize: '18px' }}
-                    >
-                        ✕
-                    </button>
+                    <button onClick={onClose} style={{ background: 'transparent', color: '#39FF14', border: 'none', cursor: 'pointer', fontFamily: 'monospace', fontSize: '18px' }}>✕</button>
                 </div>
-                {content}
+
+                {capacidadAgotada ? (
+                    <p style={{ textAlign: 'center', color: '#ff003c', border: '1px solid #ff003c', padding: '16px', fontSize: '13px', letterSpacing: '2px' }}>
+                        ⬛ CAPACIDAD DE INFECCIÓN<br />AGOTADA PARA ESTA CONEXIÓN
+                    </p>
+                ) : (
+                    <form onSubmit={handleSubmit}>
+                        {/* Color */}
+                        <p style={{ marginBottom: '10px', fontSize: '12px', color: 'rgba(57,255,20,0.6)', letterSpacing: '1px' }}>COLOR DE INFECCIÓN</p>
+                        <div style={{ display: 'flex', gap: '8px', marginBottom: '14px', flexWrap: 'wrap' }}>
+                            {COLOR_OPTIONS.map(c => (
+                                <button key={c} type="button" onClick={() => setSelectedColor(c)} style={{
+                                    width: '28px', height: '28px', background: c, border: 'none',
+                                    cursor: 'pointer', borderRadius: '2px',
+                                    outline: selectedColor === c ? `3px solid ${c}` : '3px solid transparent',
+                                    outlineOffset: '2px',
+                                    boxShadow: selectedColor === c ? `0 0 12px ${c}` : 'none',
+                                    transition: 'box-shadow 0.2s',
+                                }} />
+                            ))}
+                            <label title="Color personalizado" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+                                <span style={{ fontSize: '10px', color: 'rgba(57,255,20,0.5)', fontFamily: 'monospace', marginRight: '4px' }}>HEX</span>
+                                <input type="color" value={selectedColor} onChange={e => setSelectedColor(e.target.value)}
+                                    style={{ width: '28px', height: '28px', border: 'none', background: 'none', cursor: 'pointer', padding: 0 }} />
+                            </label>
+                        </div>
+
+                        {/* Tipografía */}
+                        <p style={{ marginBottom: '10px', fontSize: '12px', color: 'rgba(57,255,20,0.6)', letterSpacing: '1px' }}>TIPOGRAFÍA</p>
+                        <div style={{ display: 'flex', gap: '6px', marginBottom: '14px', flexWrap: 'wrap' }}>
+                            {FONT_OPTIONS.map(f => (
+                                <button key={f.key} type="button" onClick={() => setSelectedFont(f.key)}
+                                    style={{ ...selectorBtnStyle(selectedFont === f.key), fontFamily: f.css }}>
+                                    {f.label}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* Live preview */}
+                        {mensaje && (
+                            <div style={{
+                                color: selectedColor, fontFamily: fontCss,
+                                fontSize: '16px', letterSpacing: '2px', marginBottom: '10px',
+                                textShadow: `0 0 10px ${selectedColor}`,
+                                minHeight: '24px', padding: '6px 0',
+                                borderBottom: '1px solid rgba(57,255,20,0.15)',
+                            }}>
+                                {mensaje}
+                            </div>
+                        )}
+
+                        {/* Mensaje */}
+                        <input
+                            ref={inputRef}
+                            type="text"
+                            value={mensaje}
+                            onChange={e => setMensaje(e.target.value)}
+                            placeholder="_ tu infección"
+                            maxLength={120}
+                            style={{
+                                width: '100%', padding: '10px',
+                                background: '#000', border: `1px solid ${selectedColor}`,
+                                color: selectedColor, fontFamily: fontCss,
+                                fontSize: '16px', marginBottom: '10px',
+                                boxSizing: 'border-box', letterSpacing: '1px',
+                                boxShadow: `0 0 8px ${selectedColor}33`,
+                                transition: 'border-color 0.2s, color 0.2s',
+                            }}
+                        />
+
+                        {/* Email opcional */}
+                        <input
+                            type="email"
+                            value={email}
+                            onChange={e => setEmail(e.target.value)}
+                            placeholder="tu@correo.com (opcional)"
+                            style={{
+                                width: '100%', padding: '8px 10px',
+                                background: 'transparent',
+                                border: '1px solid rgba(57,255,20,0.25)',
+                                color: 'rgba(57,255,20,0.6)',
+                                fontFamily: 'monospace', fontSize: '12px',
+                                marginBottom: '12px', boxSizing: 'border-box',
+                                letterSpacing: '1px',
+                            }}
+                        />
+
+                        {disponibles !== null && (
+                            <p style={{ fontSize: '11px', color: 'rgba(57,255,20,0.5)', marginBottom: '14px', letterSpacing: '1px' }}>
+                                INFECCIONES DISPONIBLES: {disponibles} / {MAX_INFECCIONES}
+                            </p>
+                        )}
+
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <button type="submit" disabled={!mensaje.trim() || status === 'TRANSMITIENDO...'} style={{
+                                background: status === 'TRANSMITIENDO...' ? '#555' : selectedColor,
+                                color: '#000', border: 'none', padding: '10px 20px',
+                                cursor: mensaje.trim() && status !== 'TRANSMITIENDO...' ? 'pointer' : 'not-allowed',
+                                fontWeight: 'bold', fontFamily: 'monospace', letterSpacing: '2px',
+                            }}>
+                                {status === 'TRANSMITIENDO...' ? '...' : 'INFECTAR'}
+                            </button>
+                            <button type="button" onClick={onClose} style={{
+                                background: 'transparent', color: '#39FF14',
+                                border: '1px solid #39FF14', padding: '10px 20px',
+                                cursor: 'pointer', fontFamily: 'monospace',
+                            }}>
+                                CANCELAR
+                            </button>
+                        </div>
+                    </form>
+                )}
+
+                {status && (
+                    <p style={{ marginTop: '20px', textAlign: 'center', textTransform: 'uppercase', fontSize: '13px' }}>
+                        {status}
+                    </p>
+                )}
             </div>
         </div>
     );
