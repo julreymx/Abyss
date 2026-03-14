@@ -1,0 +1,106 @@
+<!-- 
+  ==============================================================
+  🚀 JULES OS - EASTER EGG MARCIANO (SNIPPET)
+  ==============================================================
+  INSTRUCCIONES:
+  1. Pega este código al final de tu etiqueta <footer> o justo 
+     antes de cerrar la etiqueta </body> en tu web personal 
+     (eldominiodejr.com).
+  2. Ajusta la variable "URL_DE_JULES_OS" en el evento onclick 
+     a la dirección real donde publicarás tu entorno experimental 
+     (por ejemplo: "https://os.eldominiodejr.com/").
+  ==============================================================
+-->
+
+<style>
+  /* --- Estilos del Marciano Easter Egg --- */
+  .jules-os-invitation {
+      position: fixed; /* O usa absolute si prefieres que esté atado al footer */
+      bottom: 20px;
+      right: 20px;
+      width: 40px;
+      height: 40px;
+      cursor: pointer;
+      z-index: 9999;
+      
+      /* Modo Sigiloso (Oculto/Tenue) */
+      opacity: 0.1;
+      filter: grayscale(100%);
+      transition: all 0.3s ease-in-out;
+  }
+
+  /* SVG del marciano estilo Pixel Art */
+  .jules-os-invitation-svg {
+      width: 100%;
+      height: 100%;
+      shape-rendering: crispEdges;
+  }
+
+  /* Modo Activo (Hover): Sale a la luz, a color, brillante y girando */
+  .jules-os-invitation:hover {
+      opacity: 1;
+      filter: grayscale(0%) drop-shadow(0 0 15px #39FF14);
+      animation: spin-glitch-marciano 2s infinite steps(4);
+  }
+
+  /* Animación de rotación glitch tipo OS Mental */
+  @keyframes spin-glitch-marciano {
+      0% { transform: rotate(0deg) scale(1); }
+      50% { transform: rotate(180deg) scale(1.3); filter: hue-rotate(180deg) drop-shadow(0 0 25px #00ffff); }
+      100% { transform: rotate(360deg) scale(1); }
+  }
+</style>
+
+<div class="jules-os-invitation" onclick="window.location.href='URL_DE_JULES_OS'" title="Infectar terminal...">
+  <svg class="jules-os-invitation-svg" viewBox="0 0 14 14" xmlns="http://www.w3.org/2000/svg">
+      <!-- Fila 0 -->
+      <rect x="4" y="0" width="6" height="1" fill="#39FF14" />
+      <!-- Fila 1 -->
+      <rect x="2" y="1" width="10" height="1" fill="#39FF14" />
+      <!-- Fila 2 -->
+      <rect x="1" y="2" width="1" height="1" fill="#39FF14" />
+      <rect x="2" y="2" width="3" height="1" fill="#8aff9e" /> <!-- Brillo LLL -->
+      <rect x="5" y="2" width="8" height="1" fill="#39FF14" />
+      <!-- Fila 3 -->
+      <rect x="1" y="3" width="1" height="1" fill="#39FF14" />
+      <rect x="2" y="3" width="2" height="1" fill="#8aff9e" /> <!-- Brillo LL -->
+      <rect x="4" y="3" width="9" height="1" fill="#39FF14" />
+      <!-- Fila 4 & 5 completas de verde -->
+      <rect x="0" y="4" width="14" height="2" fill="#39FF14" />
+      <!-- Fila 6: Ojos -->
+      <rect x="0" y="6" width="2" height="1" fill="#39FF14" />
+      <rect x="2" y="6" width="3" height="1" fill="#000000" /> <!-- B B B -->
+      <rect x="5" y="6" width="4" height="1" fill="#39FF14" />
+      <rect x="9" y="6" width="3" height="1" fill="#000000" /> <!-- B B B -->
+      <rect x="12" y="6" width="2" height="1" fill="#39FF14" />
+      <!-- Fila 7 -->
+      <rect x="0" y="7" width="1" height="1" fill="#39FF14" />
+      <rect x="1" y="7" width="1" height="1" fill="#000000" /> <!-- B -->
+      <rect x="2" y="7" width="1" height="1" fill="#39FF14" />
+      <rect x="3" y="7" width="3" height="1" fill="#000000" /> <!-- B B B -->
+      <rect x="6" y="7" width="2" height="1" fill="#39FF14" />
+      <rect x="8" y="7" width="1" height="1" fill="#000000" /> <!-- B -->
+      <rect x="9" y="7" width="3" height="1" fill="#000000" /> <!-- B B B -->
+      <rect x="12" y="7" width="2" height="1" fill="#39FF14" />
+      <!-- Fila 8 -->
+      <rect x="0" y="8" width="1" height="1" fill="#39FF14" />
+      <rect x="1" y="8" width="5" height="1" fill="#000000" /> <!-- B x5 -->
+      <rect x="6" y="8" width="2" height="1" fill="#39FF14" />
+      <rect x="8" y="8" width="5" height="1" fill="#000000" /> <!-- B x5 -->
+      <rect x="13" y="8" width="1" height="1" fill="#39FF14" />
+      <!-- Fila 9 -->
+      <rect x="1" y="9" width="1" height="1" fill="#39FF14" />
+      <rect x="2" y="9" width="3" height="1" fill="#000000" /> <!-- B B B -->
+      <rect x="5" y="9" width="4" height="1" fill="#39FF14" />
+      <rect x="9" y="9" width="3" height="1" fill="#000000" /> <!-- B B B -->
+      <rect x="12" y="9" width="1" height="1" fill="#39FF14" />
+      <!-- Fila 10 -->
+      <rect x="2" y="10" width="10" height="1" fill="#39FF14" />
+      <!-- Fila 11 -->
+      <rect x="3" y="11" width="8" height="1" fill="#39FF14" />
+      <!-- Fila 12 -->
+      <rect x="4" y="12" width="6" height="1" fill="#39FF14" />
+      <!-- Fila 13 -->
+      <rect x="5" y="13" width="4" height="1" fill="#39FF14" />
+  </svg>
+</div>

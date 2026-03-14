@@ -83,12 +83,12 @@ const fragmentShader = `
 `;
 
 function mulberry32(a) {
-    return function() {
-      var t = a += 0x6D2B79F5;
-      t = Math.imul(t ^ t >>> 15, t | 1);
-      t ^= t + Math.imul(t ^ t >>> 7, t | 61);
-      return ((t ^ t >>> 14) >>> 0) / 4294967296;
-    }
+  return function () {
+    var t = a += 0x6D2B79F5;
+    t = Math.imul(t ^ t >>> 15, t | 1);
+    t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  }
 }
 
 // MAX_PARTICLES is fixed to 5000 to avoid remounting geometry
@@ -110,11 +110,13 @@ export default function GPUFluidParticles({ count = 5000, color = '#39FF14' }) {
     for (let i = 0; i < MAX_PARTICLES; i++) {
       const theta = random() * Math.PI * 2;
       const phi = Math.acos((random() * 2) - 1);
-      const r = Math.cbrt(random()) * 5;
+      // Usar distribución cúbica para nube más volumétrica y extendida
+      const r = Math.cbrt(random()) * 18;
       pos[i * 3] = r * Math.sin(phi) * Math.cos(theta);
       pos[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
       pos[i * 3 + 2] = r * Math.cos(phi);
-      sca[i] = random() * 0.1 + 0.05;
+      // Partículas más grandes y variadas
+      sca[i] = random() * 0.18 + 0.04;
     }
     return [pos, sca];
   }, []);

@@ -8,6 +8,7 @@ export default function AbyssNavigator({ terminalOpen = false }) {
     const velocity = useRef(new THREE.Vector3());
     const euler = useRef(new THREE.Euler(0, 0, 0, 'YXZ'));
     const isLocked = useRef(false);
+    const justUnlocked = useRef(false); // evita re-lock inmediato al salir
     const SPEED = 0.04;
     const DAMPING = 0.88;
     const LOOK_SPEED = 0.002;
@@ -28,8 +29,28 @@ export default function AbyssNavigator({ terminalOpen = false }) {
             euler.current.x -= e.movementY * LOOK_SPEED;
             euler.current.x = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, euler.current.x));
         };
-        const onClick = () => { if (!terminalOpen) canvas.requestPointerLock(); };
-        const onLockChange = () => { isLocked.current = document.pointerLockElement === canvas; };
+
+        // Click: entra en modo navegación
+        // Si acaba de salir (justUnlocked) → ignora el siguiente click
+        const onClick = () => {
+            if (terminalOpen) return;
+            if (justUnlocked.current) {
+                justUnlocked.current = false;
+                return;
+            }
+            canvas.requestPointerLock();
+        };
+
+        const onLockChange = () => {
+            const locked = document.pointerLockElement === canvas;
+            if (isLocked.current && !locked) {
+                // Acabamos de salir del pointer lock (Escape del usuario)
+                justUnlocked.current = true;
+                // Tras 800ms permitir volver a lockear
+                setTimeout(() => { justUnlocked.current = false; }, 800);
+            }
+            isLocked.current = locked;
+        };
 
         window.addEventListener('keydown', onKeyDown);
         window.addEventListener('keyup', onKeyUp);

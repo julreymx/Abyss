@@ -10,12 +10,14 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey)
  * Inserts a new cryptic message (infection) from a visitor
  * @param {string} mensaje - The cryptic text
  * @param {string} color - Hex color code (e.g. '#ff0000')
+ * @param {string} userId - Supabase auth user UUID
+ * @param {string} userEmail - Supabase auth user email
  */
-export async function insertInfection(mensaje, color = '#ffffff') {
+export async function insertInfection(mensaje, color = '#ffffff', userId = null, userEmail = null) {
   try {
     const { data, error } = await supabase
       .from('infecciones')
-      .insert([{ mensaje, color }])
+      .insert([{ mensaje, color, user_id: userId, user_email: userEmail }])
       .select()
 
     if (error) throw error

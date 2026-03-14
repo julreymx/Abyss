@@ -7,7 +7,9 @@ export const useMultiplayer = () => {
     const socketRef = useRef(null);
 
     useEffect(() => {
-        const newSocket = io('http://localhost:3000');
+        // En producción (Vercel), se conectará a la Mente Maestra en Render.
+        const socketPath = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3000';
+        const newSocket = io(socketPath);
         socketRef.current = newSocket;
 
         newSocket.on('connect', () => {

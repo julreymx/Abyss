@@ -13,7 +13,9 @@ import AbyssGallery from './gallery/AbyssGallery';
 import UploadPortal from './gallery/UploadPortal';
 import InfectionTerminal from './components/InfectionTerminal';
 import AbyssNavigator from './controls/AbyssNavigator';
-import { getRecentInfections, limpiarAbismo, subscribeToInfections } from './services/supabase';
+import CenterRaycaster from './controls/CenterRaycaster';
+import { getRecentInfections, subscribeToInfections } from './services/supabase';
+import NazarCrosshair from './components/NazarCrosshair';
 
 // ----------------------------------------------------------------------
 // 1. SHADERS ENFERMOS (GLSL)
@@ -114,7 +116,9 @@ const DisturbedEntity = React.memo(({ position, rotation, audioLow, videoUrl }) 
 
     return (
         <mesh ref={meshRef} position={position} rotation={rotation}
-            onPointerOver={() => setHover(true)} onPointerOut={() => setHover(false)}>
+            userData={{ hoverable: true }}
+            onPointerOver={() => { setHover(true); window.dispatchEvent(new CustomEvent('abyss:hover', { detail: { active: true } })); }}
+            onPointerOut={() => { setHover(false); window.dispatchEvent(new CustomEvent('abyss:hover', { detail: { active: false } })); }}>
             <planeGeometry args={[4, 5, 64, 64]} />
             <meltingShaderMaterial ref={materialRef} transparent uColorEffect={new THREE.Color(toxicColor)} />
         </mesh>
@@ -184,17 +188,28 @@ export default function OSMentalAbyss() {
     const [uploadOpen, setUploadOpen] = useState(false);
     const { socket, otherPlayers } = useMultiplayer();
 
-    // Sesión efímera + suscripción en tiempo real
-    useEffect(() => {
-        // Suscribirse PRIMERO para no perder eventos
-        const channel = subscribeToInfections((newInfection) => {
-            setInfecciones(prev => [newInfection, ...prev].slice(0, 5000));
-        });
-        // Limpiar el abismo y estado local
-        limpiarAbismo().then(() => setInfecciones([]));
+    // Set de IDs ya vistos — persiste entre re-renders, sobrevive StrictMode
+    const seenIds = useRef(new Set());
+    const channelRef = useRef(null);
 
+    const addInfeccion = (inf) => {
+        if (!inf?.id || seenIds.current.has(inf.id)) return;
+        seenIds.current.add(inf.id);
+        setInfecciones(prev => [inf, ...prev].slice(0, 5000));
+    };
+
+    // Hidratar con infecciones existentes + suscribirse a nuevas en tiempo real
+    useEffect(() => {
+        if (channelRef.current) return; // evita doble suscripción (StrictMode)
+        // Cargar las últimas 200 infecciones existentes en DB
+        getRecentInfections(200).then(historicas => {
+            historicas.forEach(inf => addInfeccion(inf));
+        });
+        // Suscribirse a nuevas infecciones en tiempo real
+        channelRef.current = subscribeToInfections(addInfeccion);
         return () => {
-            channel?.unsubscribe?.();
+            channelRef.current?.unsubscribe?.();
+            channelRef.current = null;
         };
     }, []);
 
@@ -213,20 +228,45 @@ export default function OSMentalAbyss() {
     // Cada infección consume 1 partícula
     const particleCount = Math.max(0, 5000 - infecciones.length);
 
-    // Entidades físicas
-    const entities = useMemo(() => Array.from({ length: 25 }).map((_, i) => ({
-        position: [(Math.random() - 0.5) * 35, (Math.random() - 0.5) * 35, (Math.random() - 0.5) * 20 - 15],
-        rotation: [Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI],
-        videoUrl: null,
-    })), []);
+    // Entidades físicas — distribuidas dentro de la nube de partículas (radio 18)
+    const entities = useMemo(() => {
+        // Semilla determinista para posiciones consistentes
+        let s = 42;
+        const rng = () => { s = (s * 1664525 + 1013904223) & 0xffffffff; return (s >>> 0) / 0xffffffff; };
+        return Array.from({ length: 20 }).map(() => {
+            const theta = rng() * Math.PI * 2;
+            const phi = Math.acos((rng() * 2) - 1);
+            const r = (rng() * 0.5 + 0.3) * 16; // entre 5 y 16 unidades del centro
+            return {
+                position: [
+                    r * Math.sin(phi) * Math.cos(theta),
+                    r * Math.sin(phi) * Math.sin(theta),
+                    r * Math.cos(phi) - 5,
+                ],
+                rotation: [rng() * Math.PI, rng() * Math.PI, rng() * Math.PI],
+                videoUrl: null,
+            };
+        });
+    }, []);
+
+    // Posiciones de cristales dentro de la nube
+    const crystalPositions = useMemo(() => [
+        [2, 4, -6], [-5, -3, -10], [8, -5, -4], [-7, 6, -8],
+        [0, -8, -12], [5, 7, -9], [-3, 0, -14],
+    ], []);
 
     return (
         <>
-            <div style={{ width: '100vw', height: '100vh', background: '#000', overflow: 'hidden', margin: 0, padding: 0 }}>
+            <div style={{ width: '100vw', height: '100vh', background: '#000', overflow: 'hidden', margin: 0, padding: 0, cursor: 'none' }}>
                 <AudioAnalyzer setAudioLow={setAudioLow} />
+                <NazarCrosshair />
 
                 <AbyssHUD particleCount={particleCount} playerCount={Object.keys(otherPlayers).length + 1} />
-                <InfectionTerminal isOpen={terminalOpen} onClose={() => setTerminalOpen(false)} />
+                <InfectionTerminal
+                    isOpen={terminalOpen}
+                    onClose={() => setTerminalOpen(false)}
+                    onInfection={addInfeccion}
+                />
                 <UploadPortal isOpen={uploadOpen} onClose={() => setUploadOpen(false)} />
 
                 {/* Botones permanentes */}
@@ -245,13 +285,17 @@ export default function OSMentalAbyss() {
                     }}>◈ INFECTAR EL ABISMO</button>
                 </div>
 
-                <Canvas camera={{ position: [0, 0, 5], fov: 75 }} gl={{ antialias: false, powerPreference: 'high-performance' }}>
+                <Canvas camera={{ position: [0, 0, 22], fov: 70 }} gl={{ antialias: false, powerPreference: 'high-performance' }}>
                     <color attach="background" args={['#000000']} />
 
                     <AbyssNavigator terminalOpen={terminalOpen || uploadOpen} />
+                    <CenterRaycaster />
                     <GPUFluidParticles count={particleCount} color="#39FF14" />
-                    <ProceduralCrystal position={[0, 0, -8]} />
-                    <ProceduralCrystal position={[6, -3, -12]} />
+
+                    {/* Cristales dispersos dentro de la nube */}
+                    {crystalPositions.map((pos, i) => (
+                        <ProceduralCrystal key={i} position={pos} />
+                    ))}
                     <AbyssGallery />
 
                     {/* Otros jugadores */}
