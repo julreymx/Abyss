@@ -3,84 +3,49 @@ import { supabase, insertInfection } from '../services/supabase';
 import { useSession } from '../auth/AuthContext';
 
 // -----------------------------------------------------------------------
-// MagicLinkForm — se muestra cuando el visitante no está autenticado
+// AnonGate — autenticación silenciosa sin email
 // -----------------------------------------------------------------------
-function MagicLinkForm() {
-    const [email, setEmail] = useState('');
-    const [sent, setSent] = useState(false);
+function AnonGate() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
-    const handleSend = async (e) => {
-        e.preventDefault();
+    const handleEnter = async () => {
         setLoading(true);
         setError('');
-        const { error: authError } = await supabase.auth.signInWithOtp({
-            email,
-            options: { shouldCreateUser: true },
-        });
+        const { error: authError } = await supabase.auth.signInAnonymously();
         if (authError) {
             setError('✗ ERROR — ' + authError.message);
-        } else {
-            setSent(true);
+            setLoading(false);
         }
-        setLoading(false);
+        // Si exitoso, AuthContext detectará la nueva sesión automáticamente
     };
 
-    if (sent) return (
-        <div style={{ textAlign: 'center', padding: '20px' }}>
-            <p style={{ fontSize: '22px', marginBottom: '10px' }}>✓ ENLACE ENVIADO</p>
-            <p style={{ color: '#8aff9e', fontSize: '13px' }}>
-                Revisa tu correo y regresa al abismo.<br />
-                El link expira en 1 hora.
-            </p>
-        </div>
-    );
-
     return (
-        <form onSubmit={handleSend}>
-            <p style={{ marginBottom: '20px', color: '#8aff9e', fontSize: '13px', letterSpacing: '1px' }}>
-                Para infectar el abismo, identifícate.
+        <div style={{ textAlign: 'center', padding: '10px 0' }}>
+            <p style={{ marginBottom: '24px', color: '#8aff9e', fontSize: '13px', letterSpacing: '1px', lineHeight: '1.6' }}>
+                Para infectar el abismo<br />
+                <span style={{ color: 'rgba(57,255,20,0.5)', fontSize: '11px' }}>sin cuenta, sin rastro</span>
             </p>
-            <input
-                type="email"
-                placeholder="tu@correo.com"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                required
-                autoFocus
-                style={{
-                    width: '100%',
-                    padding: '10px',
-                    background: '#000',
-                    border: '1px solid #39FF14',
-                    color: '#39FF14',
-                    fontFamily: 'monospace',
-                    fontSize: '16px',
-                    marginBottom: '16px',
-                    boxSizing: 'border-box',
-                }}
-            />
             {error && <p style={{ color: '#ff003c', marginBottom: '12px', fontSize: '12px' }}>{error}</p>}
             <button
-                type="submit"
+                onClick={handleEnter}
                 disabled={loading}
                 style={{
                     background: loading ? '#555' : '#39FF14',
                     color: '#000',
                     border: 'none',
-                    padding: '10px 24px',
+                    padding: '12px 28px',
                     cursor: loading ? 'not-allowed' : 'pointer',
                     fontWeight: 'bold',
                     fontFamily: 'monospace',
                     fontSize: '13px',
-                    letterSpacing: '2px',
+                    letterSpacing: '3px',
                     width: '100%',
                 }}
             >
-                {loading ? 'TRANSMITIENDO...' : 'SOLICITAR ACCESO →'}
+                {loading ? 'CONECTANDO...' : 'INFECTAR →'}
             </button>
-        </form>
+        </div>
     );
 }
 
@@ -313,7 +278,7 @@ export default function InfectionTerminal({ isOpen, onClose, onInfection }) {
             </p>
         );
     } else if (!session) {
-        content = <MagicLinkForm />;
+        content = <AnonGate />;
     } else {
         content = <TerminalForm session={session} onInfection={onInfection} onClose={onClose} />;
     }
