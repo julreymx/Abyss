@@ -5,8 +5,11 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'your-anon-key
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
-// Entorno activo: 'dev' en local, 'production' en Vercel
-const APP_ENV = import.meta.env.VITE_APP_ENV || 'production'
+// Entorno activo: usa PROD de Vite (true en cualquier build de producción) como fuente de verdad
+// VITE_APP_ENV solo se usa para override manual en dev
+const APP_ENV = import.meta.env.PROD
+    ? 'production'
+    : (import.meta.env.VITE_APP_ENV || 'dev')
 
 /**
  * Inserts a new cryptic message (infection) from a visitor.
@@ -50,8 +53,8 @@ export function subscribeToInfections(callback) {
       'postgres_changes',
       { event: 'INSERT', schema: 'public', table: 'infecciones' },
       (payload) => {
-        // Filtrar en cliente: solo infecciones de este entorno
-        if (!payload.new.environment || payload.new.environment === ENV) {
+        // Filtro estricto: solo infecciones con environment === ENV (rechaza NULLs y otros envs)
+        if (payload.new.environment === ENV) {
           callback(payload.new);
         }
       }
