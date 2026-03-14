@@ -210,13 +210,12 @@ function resolveOwner() {
     const params = new URLSearchParams(window.location.search);
     const godParam = params.get('god');
     if (godParam === GOD_KEY) {
-        sessionStorage.setItem('abyss_god', '1');
+        localStorage.setItem('abyss_god', '1');   // persistente entre pestañas/sesiones
         // Limpiar param de la URL sin recargar
-        const clean = window.location.pathname;
-        window.history.replaceState({}, '', clean);
+        window.history.replaceState({}, '', window.location.pathname);
         return true;
     }
-    return sessionStorage.getItem('abyss_god') === '1';
+    return localStorage.getItem('abyss_god') === '1';
 }
 
 export default function OSMentalAbyss() {

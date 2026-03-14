@@ -53,10 +53,11 @@ export function subscribeToInfections(callback) {
       'postgres_changes',
       { event: 'INSERT', schema: 'public', table: 'infecciones' },
       (payload) => {
-        // Filtro estricto: solo infecciones con environment === ENV (rechaza NULLs y otros envs)
-        if (payload.new.environment === ENV) {
-          callback(payload.new);
-        }
+        const env = payload.new.environment;
+        const match = ENV === 'production'
+          ? env === 'production'
+          : env === 'dev' || env === null || env === undefined;
+        if (match) callback(payload.new);
       }
     )
     .subscribe();
@@ -64,21 +65,28 @@ export function subscribeToInfections(callback) {
 
 /**
  * Retrieves the latest infections for the current environment.
+ * Production: strict 'production' only.
+ * Dev: no filter — show all infections so test data is always visible locally.
  */
 export async function getRecentInfections(limit = 150) {
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from('infecciones')
       .select('*')
-      .eq('environment', APP_ENV)
       .order('created_at', { ascending: false })
-      .limit(limit)
+      .limit(limit);
 
-    if (error) throw error
-    return data
+    if (APP_ENV === 'production') {
+      query = query.eq('environment', 'production');
+    }
+    // dev: no filter, show everything
+
+    const { data, error } = await query;
+    if (error) throw error;
+    return data;
   } catch (err) {
-    console.error('Error fetching infections:', err)
-    return []
+    console.error('Error fetching infections:', err);
+    return [];
   }
 }
 
