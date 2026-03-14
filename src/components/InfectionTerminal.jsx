@@ -84,8 +84,8 @@ export default function InfectionTerminal({ isOpen, onClose, onInfection, isOwne
         const result = await insertInfection(
             mensaje.trim(),
             selectedColor,
-            visitor?.id || null,
-            email.trim() || null,
+            null,                                       // user_id → null (no Supabase auth)
+            email.trim() || `visitor:${visitor?.id}`,  // email para trazabilidad
             selectedFont,
         );
 
