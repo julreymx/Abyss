@@ -1,6 +1,10 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { insertInfection } from '../services/supabase';
 
+// Trazabilidad del build — visible en consola de producción
+const BUILD_TS = import.meta.env.VITE_BUILD_TS || 'local';
+console.log('[InfectionTerminal] build:', BUILD_TS, '| env:', import.meta.env.PROD ? 'production' : 'dev');
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const MAX_INFECCIONES = 5;
 const LS_KEY = 'abyss_visitor';
@@ -48,7 +52,8 @@ function injectFonts() {
 
 // ── InfectionTerminal ─────────────────────────────────────────────────────────
 export default function InfectionTerminal({ isOpen, onClose, onInfection, isOwner = false }) {
-    const [visitor, setVisitor] = useState(null);
+    // Inicializar visitor de forma perezosa (evita race condition con useEffect)
+    const [visitor, setVisitor] = useState(() => getVisitor());
     const [mensaje, setMensaje] = useState('');
     const [email, setEmail] = useState('');
     const [status, setStatus] = useState('');
@@ -59,6 +64,7 @@ export default function InfectionTerminal({ isOpen, onClose, onInfection, isOwne
     useEffect(() => {
         if (isOpen) {
             injectFonts();
+            // Re-leer visitor al abrir por si cambió en otra pestaña
             setVisitor(getVisitor());
             setTimeout(() => inputRef.current?.focus(), 50);
         }
