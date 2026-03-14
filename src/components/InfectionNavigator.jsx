@@ -108,7 +108,27 @@ export default function InfectionNavigator({ infecciones = [] }) {
         setTimeout(() => setFlyingTo(null), 2000);
     };
 
-    if (infecciones.length === 0) return null;
+    if (infecciones.length === 0) return (
+        <div style={{
+            position: 'fixed', bottom: '24px', left: '20px',
+            zIndex: 9000, width: '280px', fontFamily: 'monospace',
+            userSelect: 'none',
+        }}>
+            <div style={{
+                background: 'rgba(0,4,0,0.88)',
+                border: '1px solid rgba(57,255,20,0.15)',
+                backdropFilter: 'blur(8px)',
+                padding: '10px 12px',
+            }}>
+                <span style={{ color: 'rgba(57,255,20,0.3)', fontSize: '9px', letterSpacing: '3px' }}>
+                    ◈ SEÑALES RECIENTES
+                </span>
+                <p style={{ color: 'rgba(57,255,20,0.2)', fontSize: '10px', letterSpacing: '1px', margin: '8px 0 0' }}>
+                    — sin señales aún —
+                </p>
+            </div>
+        </div>
+    );
 
     return (
         <div style={{
