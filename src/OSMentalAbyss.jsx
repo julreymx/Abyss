@@ -202,6 +202,23 @@ const AggressivePostProcessing = () => {
 // ----------------------------------------------------------------------
 // 6. OS_MENTAL_ABYSS — ENTRY POINT
 // ----------------------------------------------------------------------
+// ── God Mode helpers ──────────────────────────────────────────────────────────
+const GOD_KEY = import.meta.env.VITE_GOD_KEY || 'jrmaster';
+
+function resolveOwner() {
+    if (typeof window === 'undefined') return false;
+    const params = new URLSearchParams(window.location.search);
+    const godParam = params.get('god');
+    if (godParam === GOD_KEY) {
+        sessionStorage.setItem('abyss_god', '1');
+        // Limpiar param de la URL sin recargar
+        const clean = window.location.pathname;
+        window.history.replaceState({}, '', clean);
+        return true;
+    }
+    return sessionStorage.getItem('abyss_god') === '1';
+}
+
 export default function OSMentalAbyss() {
     const [audioLow, setAudioLow]     = useState(0);
     const [infecciones, setInfecciones] = useState([]);
@@ -209,6 +226,7 @@ export default function OSMentalAbyss() {
     const [uploadOpen, setUploadOpen]   = useState(false);
     const [isPointerLocked, setIsPointerLocked] = useState(false);
     const [assetPreview, setAssetPreview] = useState(null); // { url, tipo, nombre }
+    const isOwner = resolveOwner();
     const { socket, otherPlayers } = useMultiplayer();
 
     // Set de IDs ya vistos — persiste entre re-renders, sobrevive StrictMode
@@ -244,17 +262,17 @@ export default function OSMentalAbyss() {
         return () => window.removeEventListener('abyss:lockchange', onLockChange);
     }, []);
 
-    // Shortcuts de teclado [I] y [U]
+    // Shortcuts de teclado [I] y (solo dueño) [U]
     useEffect(() => {
         const onKey = (e) => {
             if (e.target.matches('input, textarea')) return;
             if (e.code === 'KeyI') { e.preventDefault(); setTerminalOpen(v => !v); }
-            if (e.code === 'KeyU') { e.preventDefault(); setUploadOpen(v => !v); }
+            if (e.code === 'KeyU' && isOwner) { e.preventDefault(); setUploadOpen(v => !v); }
             if (e.key === 'Escape') { setTerminalOpen(false); setUploadOpen(false); }
         };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
-    }, []);
+    }, [isOwner]);
 
     // Escuchar apertura de asset (guard: ignorar si ya hay popup abierto)
     const assetPreviewRef = useRef(null);
@@ -386,21 +404,24 @@ export default function OSMentalAbyss() {
                     </button>
                 )}
 
-                <AbyssHUD particleCount={particleCount} playerCount={Object.keys(otherPlayers).length + 1} />
+                <AbyssHUD particleCount={particleCount} playerCount={Object.keys(otherPlayers).length + 1} isOwner={isOwner} />
                 <InfectionTerminal
                     isOpen={terminalOpen}
                     onClose={() => setTerminalOpen(false)}
                     onInfection={addInfeccion}
+                    isOwner={isOwner}
                 />
-                <UploadPortal isOpen={uploadOpen} onClose={() => setUploadOpen(false)} />
+                {isOwner && <UploadPortal isOpen={uploadOpen} onClose={() => setUploadOpen(false)} />}
 
                 {/* Botones permanentes */}
                 <div style={{ position: 'fixed', bottom: '20px', right: '20px', display: 'flex', gap: '12px', zIndex: 999 }}>
-                    <button onClick={() => setUploadOpen(true)} style={{
-                        background: 'transparent', color: '#39FF14', border: '1px solid #39FF14',
-                        padding: '10px 16px', cursor: 'pointer', fontFamily: 'monospace',
-                        fontSize: '11px', letterSpacing: '2px',
-                    }}>◈ SUBIR ARCHIVO</button>
+                    {isOwner && (
+                        <button onClick={() => setUploadOpen(true)} style={{
+                            background: 'transparent', color: '#39FF14', border: '1px solid #39FF14',
+                            padding: '10px 16px', cursor: 'pointer', fontFamily: 'monospace',
+                            fontSize: '11px', letterSpacing: '2px',
+                        }}>◈ SUBIR ARCHIVO</button>
+                    )}
                     <button onClick={() => setTerminalOpen(v => !v)} style={{
                         background: terminalOpen ? '#39FF14' : 'rgba(0,5,0,0.85)',
                         color: terminalOpen ? '#000' : '#39FF14',

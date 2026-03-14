@@ -2,14 +2,16 @@ import React, { useRef, useState, useEffect } from 'react';
 import { insertInfection } from '../services/supabase';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-const MAX_INFECCIONES = 2;
+const MAX_INFECCIONES = 5;
 const LS_KEY = 'abyss_visitor';
 
 function getVisitor() {
     try {
         const raw = localStorage.getItem(LS_KEY);
         if (raw) return JSON.parse(raw);
-    } catch (_) { /* noop */ }
+    } catch {
+        /* noop */
+    }
     const visitor = { id: crypto.randomUUID(), count: 0 };
     localStorage.setItem(LS_KEY, JSON.stringify(visitor));
     return visitor;
@@ -45,7 +47,7 @@ function injectFonts() {
 }
 
 // ── InfectionTerminal ─────────────────────────────────────────────────────────
-export default function InfectionTerminal({ isOpen, onClose, onInfection }) {
+export default function InfectionTerminal({ isOpen, onClose, onInfection, isOwner = false }) {
     const [visitor, setVisitor] = useState(null);
     const [mensaje, setMensaje] = useState('');
     const [email, setEmail] = useState('');
@@ -64,8 +66,8 @@ export default function InfectionTerminal({ isOpen, onClose, onInfection }) {
 
     if (!isOpen) return null;
 
-    const capacidadAgotada = visitor !== null && visitor.count >= MAX_INFECCIONES;
-    const disponibles = visitor !== null ? Math.max(0, MAX_INFECCIONES - visitor.count) : null;
+    const capacidadAgotada = !isOwner && visitor !== null && visitor.count >= MAX_INFECCIONES;
+    const disponibles = !isOwner ? (visitor !== null ? Math.max(0, MAX_INFECCIONES - visitor.count) : null) : null;
     const fontCss = FONT_OPTIONS.find(f => f.key === selectedFont)?.css || "'Courier New', monospace";
 
     const handleSubmit = async (e) => {
