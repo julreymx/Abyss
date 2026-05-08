@@ -103,6 +103,7 @@ export function subscribeToInfections(callback) {
   let latestIds = [];
   const interval = setInterval(async () => {
     const data = await getRecentInfections(150);
+    if (!Array.isArray(data)) return;
     const newIds = data.map(d => d.id).join(',');
     if (newIds !== latestIds) {
       latestIds = newIds;
@@ -111,6 +112,7 @@ export function subscribeToInfections(callback) {
   }, 5000);
   // Initial load
   getRecentInfections(150).then(data => {
+    if (!Array.isArray(data)) return;
     latestIds = data.map(d => d.id).join(',');
     data.forEach(item => callback(item));
   });

@@ -247,6 +247,7 @@ export default function OSMentalAbyss() {
         if (channelRef.current) return; // evita doble suscripción (StrictMode)
         // Cargar históricas: orden DESC del backend (nueva primero) es el orden final deseado
         getRecentInfections(200).then(historicas => {
+            if (!Array.isArray(historicas)) return;
             const nuevas = historicas.filter(inf => inf?.id && !seenIds.current.has(inf.id));
             nuevas.forEach(inf => seenIds.current.add(inf.id));
             setInfecciones(nuevas.slice(0, 150));

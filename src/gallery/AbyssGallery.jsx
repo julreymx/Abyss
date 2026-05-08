@@ -8,7 +8,7 @@ export default function AbyssGallery() {
     useEffect(() => {
         const fetchFiles = async () => {
             const data = await listGalleryFiles();
-            if (data) setFiles(data);
+            if (Array.isArray(data)) setFiles(data);
         };
 
         fetchFiles();
