@@ -17,7 +17,7 @@ app.use(express.json());
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 // Multer for file uploads
-const upload = multer({ dest: process.env.UPLOAD_DIR || '/data/uploads/' });
+const upload = multer({ dest: process.env.UPLOAD_DIR || '/tmp/uploads/' });
 
 // ---- AUTH ROUTES ----
 app.post('/api/auth/register', async (req, res) => {
@@ -127,7 +127,7 @@ app.delete('/api/infections', async (req, res) => {
 });
 
 // ---- GALLERY ROUTES ----
-const uploadDir = process.env.UPLOAD_DIR || '/data/uploads/';
+const uploadDir = process.env.UPLOAD_DIR || '/tmp/uploads/';
 
 // Extract sort order from filename (e.g., "001_cover.jpg" -> 1)
 function extractSortOrder(filename) {
