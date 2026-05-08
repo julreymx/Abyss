@@ -1,14 +1,16 @@
 import { createContext, useContext, useEffect, useState } from 'react';
-import { supabase } from '../services/supabase';
+import { getSession, getToken, onAuthStateChange, logout } from '../services/api';
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-    const [session, setSession] = useState(undefined); // undefined = cargando
+    const [session, setSession] = useState(undefined); // undefined = loading
 
     useEffect(() => {
-        supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        getSession().then(({ data }) => {
+            setSession(data.session);
+        });
+        const { data: { subscription } } = onAuthStateChange((event, session) => {
             setSession(session);
         });
         return () => subscription.unsubscribe();
@@ -18,3 +20,5 @@ export function AuthProvider({ children }) {
 }
 
 export const useSession = () => useContext(AuthContext);
+
+export { logout };

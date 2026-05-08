@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { insertInfection } from '../services/supabase';
+import { insertInfection } from '../services/api';
 
 // Trazabilidad del build — visible en consola de producción
 const BUILD_TS = import.meta.env.VITE_BUILD_TS || 'local';
@@ -84,15 +84,15 @@ export default function InfectionTerminal({ isOpen, onClose, onInfection, isOwne
         const result = await insertInfection(
             mensaje.trim(),
             selectedColor,
-            null,                                       // user_id → null (no Supabase auth)
+            null,                                       // user_id → null (no auth)
             email.trim() || `visitor:${visitor?.id}`,  // email para trazabilidad
             selectedFont,
         );
 
-        if (result && result[0]) {
+        if (result && result.id) {
             const updated = incrementVisitor(visitor);
             setVisitor(updated);
-            onInfection?.(result[0]);
+            onInfection?.(result);
             setStatus('✓ INFECCIÓN ACEPTADA');
         } else {
             setStatus('✗ ERROR — REINTENTA');

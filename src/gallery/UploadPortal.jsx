@@ -1,6 +1,8 @@
-
 import React, { useState } from 'react';
-import { supabase } from '../services/supabase';
+import { uploadFile } from '../services/api';
+
+// Accepted file types for upload
+const ACCEPTED = '.zip,image/jpeg,image/png,image/gif,image/webp,image/svg+xml,video/mp4,video/webm,video/ogg,video/quicktime';
 
 export default function UploadPortal({ isOpen, onClose }) {
     const [file, setFile] = useState(null);
@@ -15,39 +17,11 @@ export default function UploadPortal({ isOpen, onClose }) {
         setStatus('UPLOAD IN PROGRESS...');
 
         try {
-            const fileName = `${Date.now()}_${file.name}`;
-            const { data: uploadData, error: uploadError } = await supabase.storage
-                .from('archivos-abyss')
-                .upload(fileName, file);
+            const result = await uploadFile(file);
+            if (!result) throw new Error('Upload failed');
 
-            if (uploadError) throw uploadError;
-
-            const { data: { publicUrl } } = supabase.storage
-                .from('archivos-abyss')
-                .getPublicUrl(fileName);
-
-            // Shell distribution: random point in sphere shell r=[12,55]
-            // avoids clustering near the origin
-            const theta = Math.random() * Math.PI * 2;
-            const phi   = Math.acos(Math.random() * 2 - 1);
-            const r     = 12 + Math.random() * 43; // 12..55
-            const px    = r * Math.sin(phi) * Math.cos(theta);
-            const py    = r * Math.sin(phi) * Math.sin(theta) * 0.75; // slightly flatten Y
-            const pz    = r * Math.cos(phi) * 0.6 - 10;               // push slightly back
-
-            const { error: dbError } = await supabase.from('archivos').insert([{
-                nombre: file.name,
-                tipo: file.type || 'application/octet-stream',
-                url: publicUrl,
-                posicion_x: px,
-                posicion_y: py,
-                posicion_z: pz,
-            }]);
-
-
-            if (dbError) throw dbError;
-
-            setStatus('UPLOAD COMPLETE');
+            const count = result.uploaded || 1;
+            setStatus(`UPLOAD COMPLETE — ${count} FILE${count > 1 ? 'S' : ''}`);
             setFile(null);
             setTimeout(() => {
                 onClose();
@@ -83,9 +57,14 @@ export default function UploadPortal({ isOpen, onClose }) {
             }}>
                 <h2 style={{ margin: '0 0 20px 0', borderBottom: '1px solid #39FF14', paddingBottom: '10px' }}>[ UPLOAD_PORTAL ]</h2>
 
+                <p style={{ fontSize: '12px', color: '#888', marginBottom: '10px' }}>
+                    ZIP: preserves folder structure. Name files 001_, 002_ for order.
+                </p>
+
                 <form onSubmit={handleUpload}>
                     <input
                         type="file"
+                        accept={ACCEPTED}
                         onChange={(e) => setFile(e.target.files[0])}
                         style={{ marginBottom: '20px', display: 'block', color: '#fff' }}
                         disabled={uploading}
@@ -128,5 +107,3 @@ export default function UploadPortal({ isOpen, onClose }) {
         </div>
     );
 }
-
-

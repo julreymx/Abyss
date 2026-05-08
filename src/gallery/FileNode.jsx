@@ -3,10 +3,9 @@ import { useFrame, useThree, extend } from '@react-three/fiber';
 import { useTexture, useVideoTexture, Html, shaderMaterial } from '@react-three/drei';
 import * as THREE from 'three';
 
-// ─── CONSTANTE DWELL ─────────────────────────────────────────────────────────
-const DWELL_MAX = 11; // segundos para teletransporte
+// ── CONSTANTE DWELL ─────────────────────────────────────────
+const DWELL_MAX = 11;
 
-// ─── Helper: posición aleatoria dentro de la nube ─────────────────────────
 function randomInCloud() {
     const theta = Math.random() * Math.PI * 2;
     const phi   = Math.acos(Math.random() * 2 - 1);
@@ -18,17 +17,16 @@ function randomInCloud() {
     ];
 }
 
-// ─── MELTING SHADER con sistema de Dwell ─────────────────────────────────────
-// Uniformes: time, uHasTexture, tDiffuse, uColorEffect
-// uDwell  [0→1]: progreso de la mirada continua (11s = 1)
-// uDissolve [0→1]: cuando el asset se desintegra/regenera
+// ── MELTING SHADER para IMÁGENES ─────────────────────────────
+// Vertex: z-distortion + scatter
+// Fragment: chromatic aberration, scanlines, dissolve
 const MeltingAssetMaterial = shaderMaterial(
     {
         time: 0, uHasTexture: 0.0,
         tDiffuse: null,
         uColorEffect: new THREE.Color('#39FF14'),
-        uDwell: 0.0,       // 0=normal, 1=11 segundos mirado
-        uDissolve: 0.0,    // 0=visible, 1=disuelto completamente
+        uDwell: 0.0,
+        uDissolve: 0.0,
     },
     /* vertex */`
     uniform float time;
@@ -40,7 +38,7 @@ const MeltingAssetMaterial = shaderMaterial(
     vec4 permute(vec4 x){return mod(((x*34.0)+1.0)*x,289.0);}
     float noise(vec3 p){
       vec3 a=floor(p),d=p-a; d=d*d*(3.0-2.0*d);
-      vec4 b=a.xxyy+vec4(0,1,0,1),k1=permute(b.xyxy),k2=permute(k1.xyxy+b.zzww);
+      vec4 b=a.xyxy+vec4(0,1,0,1),k1=permute(b.xyxy),k2=permute(k1.xyxy+b.zzww);
       vec4 c=k2+a.zzzz,k3=permute(c),k4=permute(c+1.0);
       vec4 o1=fract(k3*(1.0/41.0)),o2=fract(k4*(1.0/41.0));
       vec4 o3=o2*d.z+o1*(1.0-d.z); vec2 o4=o3.yw*d.x+o3.xz*(1.0-d.x);
@@ -51,12 +49,10 @@ const MeltingAssetMaterial = shaderMaterial(
         vUv = uv;
         vec3 pos = position;
 
-        // Distorsión que AUMENTA con el dwell (la mirada acumula entropía)
         float distortBase = 0.08 + uDwell * 0.9;
         float wave = noise(vec3(pos.x*1.5+time*0.6, pos.y*1.5+time*0.4, pos.z)) * distortBase;
         pos.z += wave;
 
-        // Scatter al disolverse: los vértices se dispersan hacia afuera
         float scatter = noise(vec3(pos.x*3.0+time*2.0, pos.y*3.0, pos.z*3.0)) * uDissolve * 5.0;
         pos += normalize(position + 0.001) * scatter;
 
@@ -81,8 +77,6 @@ const MeltingAssetMaterial = shaderMaterial(
         vec3 color = vec3(0.04) + vec3(n);
 
         if (uHasTexture > 0.5) {
-            // Aberración cromática que CONVERGE con el dwell (imagen más fiel)
-            // shift empieza en 0.028, llega a 0 cuando dwell = 1
             float shift = 0.028 * max(0.0, 1.0 - uDwell * 1.3);
             vec4 r = texture2D(tDiffuse, uv + vec2( shift, 0.0));
             vec4 g = texture2D(tDiffuse, uv);
@@ -90,24 +84,20 @@ const MeltingAssetMaterial = shaderMaterial(
             color = mix(color, vec3(r.r, g.g, b.b), 0.92);
         }
 
-        // Tinte de color efecto (más pronunciado al inicio, se desvanece al enfocar)
         vec3 m = mix(color, uColorEffect, (1.0 - uDwell) * 0.25);
-        // Scanline que se acelera con el dwell
         float scanSpeed = 8.0 + uDwell * 60.0;
         m -= vec3(sin(vUv.y * 120.0 + time * scanSpeed) * 0.035 * (1.0 - uDwell * 0.5));
 
-        // Máscara de disolución: descarta píxeles con ruido < umbral (efecto granular)
         float dissolveMask = random(uv * (14.0 + uDissolve * 8.0) + time * 0.2);
         if (dissolveMask < uDissolve * 0.92) discard;
 
-        // Alpha normal, un poco transparente en la regeneración
         float alpha = 1.0 - uDissolve * 0.4;
         gl_FragColor = vec4(m, alpha);
     }`
 );
 extend({ MeltingAssetMaterial });
 
-// ─── Parámetros de caos por posición (determinista) ─────────────────────────
+// ── Parámetros de caos por posición ─────────────────────────
 function useChaosParams(position) {
     return useMemo(() => {
         const h = (n) => Math.abs(Math.sin(n * 127.1 + 311.7) * 43758.5453) % 1;
@@ -132,11 +122,7 @@ function useChaosParams(position) {
     }, [position]);
 }
 
-// ─── Caos: float + billboard con personalidad única, acepta basePosRef ───────
-const IDLE_QUAT = new THREE.Quaternion();
-const _savedQuat  = new THREE.Quaternion();
-const _targetQuat = new THREE.Quaternion();
-
+// ── Caos: float + billboard ────────────────────────────────
 function useChaos(groupRef, originalPosition, basePosRef) {
     const { camera } = useThree();
     const c = useChaosParams(originalPosition);
@@ -153,7 +139,6 @@ function useChaos(groupRef, originalPosition, basePosRef) {
         if (!g) return;
         const t = state.clock.elapsedTime;
 
-        // Flotar alrededor del basePosRef actual (puede cambiar en teleport)
         const bp = basePosRef.current;
         g.position.set(
             bp[0] + Math.cos(t * c.floatSpeedX + c.phaseX) * c.floatAmpX,
@@ -161,7 +146,6 @@ function useChaos(groupRef, originalPosition, basePosRef) {
             bp[2] + Math.sin(t * c.floatSpeedX * 0.7 + c.phaseX) * c.floatAmpX * 0.5
         );
 
-        // Billboard
         let isHovered = false;
         g.traverse(obj => { if (obj.isMesh && obj.userData.centerHovered) isHovered = true; });
 
@@ -182,7 +166,7 @@ function useChaos(groupRef, originalPosition, basePosRef) {
     return c;
 }
 
-// ─── useCenterHover ──────────────────────────────────────────────────────────
+// ── useCenterHover ──────────────────────────────────────
 function useCenterHover(meshRef, setHovered) {
     useFrame(() => {
         if (!meshRef.current) return;
@@ -191,13 +175,11 @@ function useCenterHover(meshRef, setHovered) {
     });
 }
 
-// ─── Estado de dwell / countdown / teleport ────────────────────────────────
-// Devuelve dwellFraction (0→1) como ref para que otros hooks lo lean
+// ── Estado de dwell / countdown / teleport ────────────────────────
 function useDwell(matRef, groupRef, basePosRef, onDwellChange, assetInfo) {
     const dwellRef   = useRef(0);
-    const phaseRef   = useRef(0); // 0=normal,1=dissolving,2=regen
+    const phaseRef   = useRef(0);
 
-    // Click handler: abrir asset si el ojo está puesto sobre él
     useEffect(() => {
         const handleClick = () => {
             if (!groupRef.current) return;
@@ -253,7 +235,7 @@ function useDwell(matRef, groupRef, basePosRef, onDwellChange, assetInfo) {
     });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────
 class BaseErrorBoundary extends React.Component {
     constructor(props) { super(props); this.state = { hasError: false }; }
     static getDerivedStateFromError() { return { hasError: true }; }
@@ -281,8 +263,8 @@ export default function FileNode({ file }) {
     );
 }
 
-// ─── IMAGE NODE ───────────────────────────────────────────────────────────────
-function ImageNode({ url, position, nombre }) {
+// ── IMAGE NODE ────────────────────────────────────────
+export function ImageNode({ url, position, nombre }) {
     const groupRef   = useRef();
     const meshRef    = useRef();
     const matRef     = useRef();
@@ -296,7 +278,7 @@ function ImageNode({ url, position, nombre }) {
     const assetInfo  = useMemo(() => ({ url, tipo: 'image', nombre }), [url, nombre]);
     const onDwell    = useCallback((v) => setDwellSec(Math.round(v * 10) / 10), []);
 
-    useEffect(() => { if (meshRef.current) meshRef.current.userData.hoverable = true; }, []);
+    useEffect(() => { if (meshRef.current) meshRef.current.userData.overable = true; }, []);
 
     const { scale } = useChaos(groupRef, position, basePosRef);
     useCenterHover(meshRef, setHovered);
@@ -305,7 +287,7 @@ function ImageNode({ url, position, nombre }) {
     useFrame((_, delta) => {
         if (matRef.current) {
             matRef.current.time += delta * 0.8;
-            matRef.current.tDiffuse    = texture;
+            matRef.current.tDiffuse   = texture;
             matRef.current.uHasTexture = 1.0;
         }
     });
@@ -338,43 +320,79 @@ function ImageNode({ url, position, nombre }) {
     );
 }
 
-// ─── VIDEO NODE ───────────────────────────────────────────────────────────────
+// ── VIDEO NODE: meshBasicMaterial — zero shader, zero deformation ───
 function VideoNode({ url, position, nombre }) {
     const groupRef   = useRef();
     const meshRef    = useRef();
-    const matRef     = useRef();
     const basePosRef = useRef([...position]);
     const [hovered, setHovered]   = useState(false);
     const [dwellSec, setDwellSec] = useState(0);
     const texture    = useVideoTexture(url, { muted: true, loop: true, start: true, crossOrigin: 'Anonymous' });
-    const toxicColor = useMemo(() =>
-        new THREE.Color(['#ff003c', '#ff6600', '#cc00ff'][Math.floor(Math.abs(Math.sin(position[1] * 100)) * 3)]),
-        [position]);
+    const [matRef, setMatRef]   = useState(null);
     const assetInfo  = useMemo(() => ({ url, tipo: 'video', nombre }), [url, nombre]);
     const onDwell    = useCallback((v) => setDwellSec(Math.round(v * 10) / 10), []);
 
-    useEffect(() => { if (meshRef.current) meshRef.current.userData.hoverable = true; }, []);
+    // Create material once — meshBasicMaterial with video texture map
+    const material = useMemo(() => {
+        const mat = new THREE.MeshBasicMaterial({
+            map: texture,
+            transparent: true,
+            opacity: 1.0,
+            side: THREE.FrontSide,
+        });
+        setMatRef(mat);
+        return mat;
+    }, [texture]);
+
+    useEffect(() => { if (meshRef.current) meshRef.current.userData.overable = true; }, []);
 
     const { scale } = useChaos(groupRef, position, basePosRef);
     useCenterHover(meshRef, setHovered);
-    useDwell(matRef, groupRef, basePosRef, onDwell, assetInfo);
 
+    // Simple dwell: dissolve via opacity (no shader distortion)
     useFrame((_, delta) => {
-        if (matRef.current) {
-            matRef.current.time += delta * 0.8;
-            matRef.current.tDiffuse    = texture;
-            matRef.current.uHasTexture = 1.0;
+        if (!material) return;
+        let isHovered = false;
+        if (groupRef.current) {
+            groupRef.current.traverse(obj => {
+                if (obj.isMesh && obj.userData.centerHovered) isHovered = true;
+            });
         }
+        if (isHovered) {
+            setDwellSec(prev => {
+                const next = prev + delta;
+                if (next >= DWELL_MAX) return DWELL_MAX;
+                return next;
+            });
+        } else {
+            setDwellSec(prev => Math.max(0, prev - delta * 1.8));
+        }
+        const dwellFraction = Math.min(dwellSec / DWELL_MAX, 1.0);
+        material.opacity = 1.0 - dwellFraction * 0.4;
     });
+
+    useEffect(() => {
+        const handleClick = () => {
+            if (!groupRef.current) return;
+            let isHov = false;
+            groupRef.current.traverse(obj => {
+                if (obj.isMesh && obj.userData.centerHovered) isHov = true;
+            });
+            if (isHov) {
+                window.dispatchEvent(new CustomEvent('abyss:assetopen', { detail: assetInfo }));
+            }
+        };
+        window.addEventListener('pointerdown', handleClick);
+        return () => window.removeEventListener('pointerdown', handleClick);
+    }, [groupRef, assetInfo]);
 
     const remaining = Math.max(0, DWELL_MAX - dwellSec);
     const showCount = dwellSec > 0.5;
 
     return (
         <group ref={groupRef}>
-            <mesh ref={meshRef} scale={[scale, scale, 1]} frustumCulled={false}>
-                <planeGeometry args={[5.2, 2.9, 32, 32]} />
-                <meltingAssetMaterial ref={matRef} transparent uColorEffect={toxicColor} />
+            <mesh ref={meshRef} scale={[scale, scale, 1]} frustumCulled={false} material={material}>
+                <planeGeometry args={[5.2, 2.9]} />
                 {hovered && <NodeLabel nombre={nombre} />}
                 {showCount && (
                     <Html center position={[0, 1.7, 0.1]}>
@@ -395,14 +413,14 @@ function VideoNode({ url, position, nombre }) {
     );
 }
 
-// ─── AUDIO NODE ───────────────────────────────────────────────────────────────
+// ── AUDIO NODE ────────────────────────────────────────
 function AudioNode({ position, nombre }) {
     const groupRef   = useRef();
     const meshRef    = useRef();
     const basePosRef = useRef([...position]);
     const [hovered, setHovered] = useState(false);
 
-    useEffect(() => { if (meshRef.current) meshRef.current.userData.hoverable = true; }, []);
+    useEffect(() => { if (meshRef.current) meshRef.current.userData.overable = true; }, []);
     useChaos(groupRef, position, basePosRef);
 
     useFrame((state) => {
@@ -434,14 +452,14 @@ function AudioNode({ position, nombre }) {
     );
 }
 
-// ─── GENERIC NODE ─────────────────────────────────────────────────────────────
+// ── GENERIC NODE ────────────────────────────────────────
 function GenericNode({ position, nombre, tipo }) {
     const groupRef   = useRef();
     const meshRef    = useRef();
     const basePosRef = useRef([...position]);
     const [hovered, setHovered] = useState(false);
 
-    useEffect(() => { if (meshRef.current) meshRef.current.userData.hoverable = true; }, []);
+    useEffect(() => { if (meshRef.current) meshRef.current.userData.overable = true; }, []);
     useChaos(groupRef, position, basePosRef);
     useCenterHover(meshRef, setHovered);
 
@@ -456,7 +474,7 @@ function GenericNode({ position, nombre, tipo }) {
     );
 }
 
-// ─── LABEL ────────────────────────────────────────────────────────────────────
+// ── LABEL ──────────────────────────────────────────
 function NodeLabel({ nombre, extra }) {
     return (
         <Html center position={[0, -2.8, 0.1]}>
@@ -468,7 +486,7 @@ function NodeLabel({ nombre, extra }) {
                 boxShadow: '0 0 14px rgba(57,255,20,0.6)',
                 textTransform: 'uppercase',
             }}>
-                ◈ {nombre}{extra ? ` [${extra.split('/')[1] || extra}]` : ''}
+                ▶ {nombre}{extra ? ` [${extra.split('/')[1] || extra}]` : ''}
             </div>
         </Html>
     );

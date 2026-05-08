@@ -5,17 +5,16 @@ import { EffectComposer, Noise, Vignette, ChromaticAberration, Glitch } from '@r
 import { GlitchMode, BlendFunction } from 'postprocessing';
 import * as THREE from 'three';
 import { extend } from '@react-three/fiber';
-import { useMultiplayer } from './multiplayer/useSockets';
 import AbyssHUD from './components/AbyssHUD';
 import GPUFluidParticles from './components/experimental/GPUFluidParticles';
 import ProceduralCrystal, { BlobPair } from './components/experimental/ProceduralCrystal';
 import AbyssGallery from './gallery/AbyssGallery';
-import UploadPortal from './gallery/UploadPortal';
+import { ImageNode } from './gallery/FileNode';
 import InfectionTerminal from './components/InfectionTerminal';
 import InfectionNavigator from './components/InfectionNavigator';
 import AbyssNavigator from './controls/AbyssNavigator';
 import CenterRaycaster from './controls/CenterRaycaster';
-import { getRecentInfections, subscribeToInfections, deleteInfection } from './services/supabase';
+import { getRecentInfections, subscribeToInfections, deleteInfection } from './services/api';
 import NazarCrosshair from './components/NazarCrosshair';
 
 // Font key → CSS (same map as InfectionTerminal/InfectionNavigator)
@@ -95,11 +94,11 @@ const AudioAnalyzer = ({ setAudioLow }) => {
 // ----------------------------------------------------------------------
 // 3. ENTIDAD FÍSICA
 // ----------------------------------------------------------------------
-const DisturbedEntity = React.memo(({ position, audioLow, videoUrl }) => {
+const DisturbedEntityInner = React.memo(({ position, audioLow, videoUrl }) => {
     const meshRef = useRef();
     const materialRef = useRef();
     const [hovered, setHover] = useState(false);
-    const videoTexture = videoUrl ? useVideoTexture(videoUrl, { muted: true, loop: true, start: true }) : null;
+    const videoTexture = useVideoTexture(videoUrl, { muted: true, loop: true, start: true });
     const toxicColor = useMemo(() => ['#39FF14', '#0a2912', '#ccff00', '#00ff66'][Math.floor(Math.random() * 4)], []);
     const targetHover = useRef(0);
 
@@ -108,12 +107,11 @@ const DisturbedEntity = React.memo(({ position, audioLow, videoUrl }) => {
             materialRef.current.time += delta;
             materialRef.current.uAudioLow = audioLow;
             materialRef.current.tDiffuse = videoTexture;
-            materialRef.current.uHasTexture = videoTexture ? 1.0 : 0.0;
+            materialRef.current.uHasTexture = 1.0;
             targetHover.current = THREE.MathUtils.lerp(targetHover.current, hovered ? 1 : 0, 0.08);
             materialRef.current.uHover = targetHover.current;
         }
         if (meshRef.current) {
-            // Billboard: siempre mirar a la cámara
             meshRef.current.lookAt(state.camera.position);
             if (hovered) {
                 meshRef.current.position.z -= delta * 2.0;
@@ -134,6 +132,12 @@ const DisturbedEntity = React.memo(({ position, audioLow, videoUrl }) => {
         </mesh>
     );
 });
+DisturbedEntityInner.displayName = 'DisturbedEntityInner';
+
+const DisturbedEntity = ({ position, audioLow, videoUrl }) => {
+    if (!videoUrl) return null;
+    return <DisturbedEntityInner position={position} audioLow={audioLow} videoUrl={videoUrl} />;
+};
 DisturbedEntity.displayName = 'DisturbedEntity';
 
 // ----------------------------------------------------------------------
@@ -222,11 +226,10 @@ export default function OSMentalAbyss() {
     const [audioLow, setAudioLow]     = useState(0);
     const [infecciones, setInfecciones] = useState([]);
     const [terminalOpen, setTerminalOpen] = useState(false);
-    const [uploadOpen, setUploadOpen]   = useState(false);
     const [isPointerLocked, setIsPointerLocked] = useState(false);
     const [assetPreview, setAssetPreview] = useState(null); // { url, tipo, nombre }
     const isOwner = resolveOwner();
-    const { socket, otherPlayers } = useMultiplayer();
+    const otherPlayers = {};
 
     // Set de IDs ya vistos — persiste entre re-renders, sobrevive StrictMode
     const seenIds = useRef(new Set());
@@ -242,9 +245,11 @@ export default function OSMentalAbyss() {
     // Hidratar con infecciones existentes + suscribirse a nuevas en tiempo real
     useEffect(() => {
         if (channelRef.current) return; // evita doble suscripción (StrictMode)
-        // Cargar las últimas 200 infecciones existentes en DB
+        // Cargar históricas: orden DESC del backend (nueva primero) es el orden final deseado
         getRecentInfections(200).then(historicas => {
-            historicas.forEach(inf => addInfeccion(inf));
+            const nuevas = historicas.filter(inf => inf?.id && !seenIds.current.has(inf.id));
+            nuevas.forEach(inf => seenIds.current.add(inf.id));
+            setInfecciones(nuevas.slice(0, 150));
         });
         // Suscribirse a nuevas infecciones en tiempo real
         channelRef.current = subscribeToInfections(addInfeccion);
@@ -266,8 +271,7 @@ export default function OSMentalAbyss() {
         const onKey = (e) => {
             if (e.target.matches('input, textarea')) return;
             if (e.code === 'KeyI') { e.preventDefault(); setTerminalOpen(v => !v); }
-            if (e.code === 'KeyU' && isOwner) { e.preventDefault(); setUploadOpen(v => !v); }
-            if (e.key === 'Escape') { setTerminalOpen(false); setUploadOpen(false); }
+            if (e.key === 'Escape') { setTerminalOpen(false); }
         };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
@@ -296,24 +300,24 @@ export default function OSMentalAbyss() {
 
     // Pods de blobs (pares rojo+azul) con personalidad única cada uno
     const blobPods = useMemo(() => [
-        // Pod 0 — lento y majestuoso
+        // Pod 0 — lento y majestuoso (atrás izquierda arriba)
         { center: [4, 8, -12],    orbitRadius: 2.0, orbitPhase: 0.4, floatSpeed: 0.3, floatAmp: 1.2,
           redParams:  { size: 0.55, deformFreq: 1.8, deformAmp: 0.35, pulseSpeed: 1.2, pulseAmp: 0.16, rotSpeedX: 0.10, rotSpeedY: 0.22 },
           blueParams: { size: 0.38, deformFreq: 3.1, deformAmp: 0.18, pulseSpeed: 2.8, pulseAmp: 0.06, rotSpeedX: 0.28, rotSpeedY: 0.12 } },
-        // Pod 1 — rápido y juguetón
-        { center: [-10, -6, -20], orbitRadius: 1.2, orbitPhase: 2.1, floatSpeed: 0.9, floatAmp: 0.5,
+        // Pod 1 — rápido y juguetón (frente derecha abajo)
+        { center: [10, -6, 14],   orbitRadius: 1.2, orbitPhase: 2.1, floatSpeed: 0.9, floatAmp: 0.5,
           redParams:  { size: 0.32, deformFreq: 3.5, deformAmp: 0.28, pulseSpeed: 3.2, pulseAmp: 0.22, rotSpeedX: 0.38, rotSpeedY: 0.44 },
           blueParams: { size: 0.45, deformFreq: 2.2, deformAmp: 0.40, pulseSpeed: 1.5, pulseAmp: 0.14, rotSpeedX: 0.15, rotSpeedY: 0.31 } },
-        // Pod 2 — asimétrico (grande vs diminuto)
+        // Pod 2 — asimétrico (atrás derecha abajo)
         { center: [14, -8, -10],  orbitRadius: 1.6, orbitPhase: 4.8, floatSpeed: 0.55, floatAmp: 1.0,
           redParams:  { size: 0.65, deformFreq: 1.5, deformAmp: 0.45, pulseSpeed: 0.8, pulseAmp: 0.25, rotSpeedX: 0.06, rotSpeedY: 0.14 },
           blueParams: { size: 0.20, deformFreq: 4.2, deformAmp: 0.12, pulseSpeed: 4.5, pulseAmp: 0.08, rotSpeedX: 0.55, rotSpeedY: 0.62 } },
-        // Pod 3 — nervioso, deformación extrema
-        { center: [-12, 14, -18], orbitRadius: 1.4, orbitPhase: 1.6, floatSpeed: 1.2, floatAmp: 0.7,
+        // Pod 3 — nervioso (frente izquierda arriba)
+        { center: [-12, 14, 16],  orbitRadius: 1.4, orbitPhase: 1.6, floatSpeed: 1.2, floatAmp: 0.7,
           redParams:  { size: 0.35, deformFreq: 4.8, deformAmp: 0.55, pulseSpeed: 4.0, pulseAmp: 0.30, rotSpeedX: 0.50, rotSpeedY: 0.60 },
           blueParams: { size: 0.42, deformFreq: 4.0, deformAmp: 0.50, pulseSpeed: 3.5, pulseAmp: 0.25, rotSpeedX: 0.42, rotSpeedY: 0.50 } },
-        // Pod 4 — lejano, enorme relativo, lentísimo
-        { center: [2, -18, -28],  orbitRadius: 2.8, orbitPhase: 3.3, floatSpeed: 0.2, floatAmp: 1.8,
+        // Pod 4 — lentísimo (atrás centro abajo)
+        { center: [2, -18, -22],  orbitRadius: 2.8, orbitPhase: 3.3, floatSpeed: 0.2, floatAmp: 1.8,
           redParams:  { size: 0.72, deformFreq: 1.2, deformAmp: 0.22, pulseSpeed: 0.6, pulseAmp: 0.10, rotSpeedX: 0.04, rotSpeedY: 0.08 },
           blueParams: { size: 0.58, deformFreq: 1.6, deformAmp: 0.28, pulseSpeed: 0.9, pulseAmp: 0.12, rotSpeedX: 0.07, rotSpeedY: 0.05 } },
     ], []);
@@ -379,7 +383,7 @@ export default function OSMentalAbyss() {
                 )}
 
                 {/* ── CUANDO LIBRE: botón prominente para retomar navegación ── */}
-                {!isPointerLocked && !terminalOpen && !uploadOpen && (
+                {!isPointerLocked && !terminalOpen && (
                     <button
                         onClick={() => document.querySelector('canvas')?.requestPointerLock()}
                         style={{
@@ -403,24 +407,15 @@ export default function OSMentalAbyss() {
                     </button>
                 )}
 
-                <AbyssHUD particleCount={particleCount} playerCount={Object.keys(otherPlayers).length + 1} isOwner={isOwner} />
+                <AbyssHUD />
                 <InfectionTerminal
                     isOpen={terminalOpen}
                     onClose={() => setTerminalOpen(false)}
                     onInfection={addInfeccion}
                     isOwner={isOwner}
                 />
-                {isOwner && <UploadPortal isOpen={uploadOpen} onClose={() => setUploadOpen(false)} />}
-
                 {/* Botones permanentes */}
                 <div style={{ position: 'fixed', bottom: '20px', right: '20px', display: 'flex', gap: '12px', zIndex: 999 }}>
-                    {isOwner && (
-                        <button onClick={() => setUploadOpen(true)} style={{
-                            background: 'transparent', color: '#39FF14', border: '1px solid #39FF14',
-                            padding: '10px 16px', cursor: 'pointer', fontFamily: 'monospace',
-                            fontSize: '11px', letterSpacing: '2px',
-                        }}>◈ SUBIR ARCHIVO</button>
-                    )}
                     <button onClick={() => setTerminalOpen(v => !v)} style={{
                         background: terminalOpen ? '#39FF14' : 'rgba(0,5,0,0.85)',
                         color: terminalOpen ? '#000' : '#39FF14',
@@ -433,7 +428,7 @@ export default function OSMentalAbyss() {
                 <Canvas camera={{ position: [0, 0, 22], fov: 70 }} gl={{ antialias: false, powerPreference: 'high-performance' }}>
                     <color attach="background" args={['#000000']} />
 
-                    <AbyssNavigator terminalOpen={terminalOpen || uploadOpen} />
+                    <AbyssNavigator terminalOpen={terminalOpen} />
                     <CenterRaycaster />
                     <GPUFluidParticles count={particleCount} color="#39FF14" />
 
@@ -443,15 +438,25 @@ export default function OSMentalAbyss() {
                     ))}
                     <AbyssGallery />
 
-                    {/* Otros jugadores */}
-                    {Object.entries(otherPlayers).map(([id, pos]) => (
-                        <mesh key={id} position={[pos.x, pos.y, pos.z - 5]}>
-                            <sphereGeometry args={[0.2, 16, 16]} />
-                            <meshBasicMaterial color="#ff00ea" wireframe />
-                        </mesh>
-                    ))}
+                    {/* Entidades con video-textura distribuidas en la nube */}
+                    <React.Suspense fallback={null}>
+                        <DisturbedEntity position={[4, 8, -12]}   videoUrl="/assets/acid125.mp4" />
+                        <DisturbedEntity position={[10, -6, 14]}  videoUrl="/assets/acid250.mp4" />
+                        <DisturbedEntity position={[14, -8, -10]} videoUrl="/assets/cinematic.mp4" />
+                        <DisturbedEntity position={[-12, 14, 16]} videoUrl="/assets/manpaint.mp4" />
+                        <DisturbedEntity position={[2, -18, -22]} videoUrl="/assets/acid125.mp4" />
+                    </React.Suspense>
 
-                    {/* Infecciones flotando en 3D */}
+                    {/* Imágenes estáticas flotando en la nube */}
+                    <React.Suspense fallback={null}>
+                        <ImageNode url="/assets/pub1.webp"    position={[-8, 12, 8]}   nombre="pub1" />
+                        <ImageNode url="/assets/alien.webp"   position={[16, 4, -6]}   nombre="alien" />
+                        <ImageNode url="/assets/mevale.webp"  position={[-6, -14, 12]} nombre="mevale" />
+                        <ImageNode url="/assets/img7.webp"    position={[8, -10, -16]} nombre="img7" />
+                        <ImageNode url="/assets/untitled.webp" position={[-16, 6, -8]} nombre="untitled" />
+                    </React.Suspense>
+
+{/* Infecciones flotando en 3D */}
                     <React.Suspense fallback={null}>
                         {infecciones.map((inf, i) => (
                             <InfectionText

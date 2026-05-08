@@ -1,6 +1,6 @@
 import React from 'react';
 
-export default function AbyssHUD({ particleCount, playerCount }) {
+export default function AbyssHUD() {
     return (
         <div style={{
             position: 'absolute',
@@ -16,16 +16,6 @@ export default function AbyssHUD({ particleCount, playerCount }) {
             fontSize: '14px',
             textShadow: '0 0 5px #39FF14'
         }}>
-            {/* Top Left */}
-            <div style={{ position: 'absolute', top: '20px', left: '20px' }}>
-                PARTÍCULAS: [{particleCount}] / 5000
-            </div>
-
-            {/* Top Right */}
-            <div style={{ position: 'absolute', top: '20px', right: '20px', textAlign: 'right' }}>
-                JUGADORES EN EL ABISMO: [{playerCount}]
-            </div>
-
             {/* Bottom Center */}
             <div style={{
                 position: 'absolute',
@@ -33,10 +23,11 @@ export default function AbyssHUD({ particleCount, playerCount }) {
                 left: '50%',
                 transform: 'translateX(-50%)',
                 fontSize: '12px',
-                letterSpacing: '2px'
+                letterSpacing: '2px',
+                textAlign: 'center'
             }}>
-                {"[I] INFECTAR · [U] SUBIR · WASD NAVEGAR"} <br/>
-                {"[CLICK IZQ] ABRIR TERCER OJO · [CLICK DER] SOLTAR ABISMO"}
+                {"WASD: NAVEGAR · ESPACIO: SUBIR · SHIFT: BAJAR"} <br/>
+                {"[I] INFECTAR · [CLICK IZQ] ABRIR TERCER OJO · [CLICK DER] SOLTAR ABISMO"}
             </div>
         </div>
     );
